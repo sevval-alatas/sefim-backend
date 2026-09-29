@@ -1,22 +1,216 @@
-// use prisma-8
+// Prisma 8 data contract. Keep this as the source of truth; do not replace it
+// with the legacy prisma/schema.prisma format.
+
+enum ProjectRole {
+  OWNER
+  ADMIN
+  ENGINEER
+  MEMBER
+}
+
+enum MemberStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
+  // Keep the existing integer key so current users and authentication remain valid.
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
   passwordHash String
-  username  String?
-  name      String?
-  posts     Post[]
+  username     String?
+  name         String?
+
+  projectMembers ProjectMember[]
+  posts          Post[]
+  deliveryNotes  DeliveryNote[]
+
   createdAt TimestamptzString @default(now())
   updatedAt temporal.updatedAtString()
 }
 
-model Post {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String?
-  author    User     @relation(fields: [authorId], references: [id])
-  authorId  Int
+model Project {
+  id      String @id @default(uuid())
+  name    String
+  code    String @unique
+  address String?
+
+  members       ProjectMember[]
+  plans         ProjectPlan[]
+  columns       Column[]
+  deliveryNotes DeliveryNote[]
+  posts         Post[]
+
   createdAt TimestamptzString @default(now())
   updatedAt temporal.updatedAtString()
+}
+
+model ProjectMember {
+  id String @id @default(uuid())
+
+  userId    Int
+  projectId String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  role      ProjectRole @default(MEMBER)
+  status    MemberStatus @default(PENDING)
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+
+  @@unique([userId, projectId])
+  @@index([projectId, status])
+}
+
+model ProjectPlan {
+  id          String  @id @default(uuid())
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  versions    PlanVersion[]
+
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+}
+
+model PlanVersion {
+  id            String      @id @default(uuid())
+  planId        String
+  plan          ProjectPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  fileUrl       String
+  fileName      String
+  createdAt     TimestamptzString @default(now())
+
+  @@unique([planId, versionNumber])
+}
+
+// Existing column, inspection, photo and detection keys and detection links
+// are preserved. projectId stays nullable so existing columns can be retained
+// and assigned to a project without a destructive backfill.
+model Column {
+  id      Int     @id @default(autoincrement())
+  projectId String?
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name    String?
+
+  width  Float?
+  height Float?
+
+  expectedRebarCount      Int?
+  expectedRebarDiameter   Float?
+  expectedStirrupDiameter Float?
+  expectedStirrupSpacing  Float?
+  expectedEdge            Float?
+
+  inspections Inspection[]
+
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+
+  @@index([projectId])
+}
+
+model Inspection {
+  id       Int    @id @default(autoincrement())
+  columnId Int
+  column   Column @relation(fields: [columnId], references: [id])
+
+  status String @default("pending")
+
+  photos InspectionPhoto[]
+
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+}
+
+model InspectionPhoto {
+  id           Int        @id @default(autoincrement())
+  inspectionId Int
+  inspection   Inspection @relation(fields: [inspectionId], references: [id])
+
+  fileUrl String
+
+  detections Detection[]
+
+  createdAt TimestamptzString @default(now())
+}
+
+model Detection {
+  id      Int             @id @default(autoincrement())
+  photoId Int
+  photo   InspectionPhoto @relation(fields: [photoId], references: [id])
+
+  type String
+
+  count      Int?
+  diameter   Float?
+  spacing    Float?
+  edge       Float?
+  confidence Float?
+
+  createdAt TimestamptzString @default(now())
+}
+
+model DeliveryNote {
+  id        Int     @id @default(autoincrement())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById Int?
+  createdBy   User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  documentNumber    String?
+  documentDate      String?
+  documentTime      String?
+  supplierName      String?
+  supplierTaxNumber String?
+  customerName      String?
+  vehiclePlate      String?
+  concreteStrength  String?
+  productionQuantity Float?
+  orderQuantity      Float?
+  photoUrl          String?
+  status            String  @default("pending")
+  rawText            String?
+
+  items DeliveryNoteItem[]
+
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+
+  @@index([projectId])
+  @@index([createdById])
+}
+
+model DeliveryNoteItem {
+  id             Int          @id @default(autoincrement())
+  deliveryNoteId Int
+  deliveryNote   DeliveryNote @relation(fields: [deliveryNoteId], references: [id])
+
+  materialName String?
+  quantity     Float?
+  unit         String?
+  unitPrice    Float?
+  totalPrice   Float?
+
+  createdAt TimestamptzString @default(now())
+}
+
+model Post {
+  // Preserve the existing Post table's integer id, authorId and nullable content.
+  id        Int      @id @default(autoincrement())
+  projectId String?
+  userId    Int      @map("authorId")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: NoAction)
+
+  title     String
+  content   String?
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+
+  @@index([projectId, createdAt])
+  @@index([userId])
 }

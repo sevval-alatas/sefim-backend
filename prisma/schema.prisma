@@ -6,9 +6,19 @@ datasource db {
   provider = "postgresql"
 }
 
-model Project {
+model Project { //şantiyedir.
   id        String   @id @default(uuid())
+
   name      String
+  code      String   @unique
+  address   String?
+
+  members       ProjectMember[]
+  plans         ProjectPlan[]
+  columns       Column[]
+  deliveryNotes DeliveryNote[]
+  posts         Post[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -19,6 +29,27 @@ model User {
   passwordHash String
   username     String?
   name         String?
+
+  projectMembers ProjectMember[]
+  posts          Post[]
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+model ProjectMember {
+  id String @id @default(uuid())
+
+  userId    String
+  projectId String
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  role   ProjectRole @default(MEMBER)
+  status MemberStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, projectId])
 }

@@ -1,7 +1,8 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
-import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
+import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { db } from '../prisma/db.js';
+import { createAccessToken } from './access-token.js';
 import type { LoginRequest, SignupRequest } from './auth.types.js';
 
 const scrypt = promisify(scryptCallback);
@@ -68,20 +69,7 @@ export class AuthService {
   }
 
   private createToken(userId: number) {
-    const secret = process.env['JWT_SECRET'];
-    if (!secret) throw new Error('JWT_SECRET is not configured');
-
-    const header = this.base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-    const payload = this.base64Url(
-      JSON.stringify({ sub: userId, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 604800 }),
-    );
-    const unsignedToken = `${header}.${payload}`;
-    const signature = createHmac('sha256', secret).update(unsignedToken).digest('base64url');
-    return `${unsignedToken}.${signature}`;
-  }
-
-  private base64Url(value: string) {
-    return Buffer.from(value).toString('base64url');
+    return createAccessToken(userId);
   }
 
   private normalizeEmail(email: string) {

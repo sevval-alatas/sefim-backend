@@ -7,9 +7,11 @@ import { ColumnController } from './column/column.controller.js';
 import { ColumnAnalyzerService } from './column/column-analyzer.service.js';
 import { AuthController } from './auth/auth.controller.js';
 import { AuthService } from './auth/auth.service.js';
+import { DeliveryNoteModule } from './delivery-note/delivery-note.module.js';
+import { ProjectModule } from './project/project.module.js';
 
 @Module({
-  imports: [],
+  imports: [DeliveryNoteModule, ProjectModule],
   controllers: [AppController, CadController, ColumnController, AuthController],
   providers: [AppService, DwgConverterService, ColumnAnalyzerService, AuthService],
 })

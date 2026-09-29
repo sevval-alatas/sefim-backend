@@ -75,6 +75,29 @@ For production, the response keeps `estimated: true`; `edge`/cover remains
 can later be backed by a Python/OpenCV or hosted model without changing the
 Flutter endpoint.
 
+## Delivery-note OCR
+
+`POST /delivery-notes` accepts an image in the multipart `photo` field (up to
+15 MB) and requires `Authorization: Bearer <accessToken>`. The verified token's
+`sub` user ID is saved as `DeliveryNote.createdById`. It stores the image, calls the Python EasyOCR service, and saves the
+recognized text and extracted header fields to `DeliveryNote`. Start the OCR
+service in a separate process:
+
+```bash
+python3 -m venv .venv-ocr
+source .venv-ocr/bin/activate
+pip install -r requirements-ocr.txt
+python3 ocr/ocr_service.py
+```
+
+The first start downloads EasyOCR's Turkish and English models. The backend
+uses `OCR_SERVICE_URL` if set; otherwise it calls `http://127.0.0.1:8010`.
+The parser follows the supplied script's date, time, dispatch number, truck
+plate, concrete strength and production quantity rules. The supplied script
+does not extract order quantity or individual material rows, so those remain
+empty; `rawText` stores the full OCR output for review. OCR failures leave the
+uploaded delivery note in `failed` status.
+
 ## Authentication
 
 The backend exposes:
