@@ -53,3 +53,23 @@ model ProjectMember {
 
   @@unique([userId, projectId])
 }
+
+model CadDrawing {
+  id                String   @id @default(uuid())
+  deviceId          String
+  originalFileName  String
+  fileSizeBytes     Int
+  dwgVersion        String?
+  originalFilePath  String?
+  convertedFormat   String?
+  convertedFileName String?
+  convertedFilePath String?
+  status            String   @default("pending")
+  errorMessage      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deviceId])
+  @@index([deviceId, createdAt])
+}

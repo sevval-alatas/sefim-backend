@@ -1,6 +1,5 @@
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
-import sharp from 'sharp';
-import type { Sharp } from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 
 type Calibration = {
   referenceWidthPx?: number;

@@ -34,9 +34,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'5f486946768368326e29e57f5d024ee5b79346849f9542ef43022922535418b8'>;
+  StorageHashBase<'498260f6d26db1767d9488d5030da86a3a3f998e0cfcb21fa0121513c13827c7'>;
 export type ExecutionHash =
-  ExecutionHashBase<'050ad7275a83b2c37a8edc126f4237dfc1beec0c6f831ea944a4824167ec2d13'>;
+  ExecutionHashBase<'045eb60e5f964620fe3e82ecd8e14f45a0f8ae9f84164d3066fdb5cdede0bf4a'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -242,6 +242,21 @@ type DefaultLiteralValue<CodecId extends string, Encoded> = CodecId extends keyo
 
 export type FieldOutputTypes = {
   readonly public: {
+    readonly CadDrawing: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly deviceId: CodecTypes['pg/text@1']['output'];
+      readonly originalFileName: CodecTypes['pg/text@1']['output'];
+      readonly fileSizeBytes: CodecTypes['pg/int4@1']['output'];
+      readonly dwgVersion: CodecTypes['pg/text@1']['output'] | null;
+      readonly originalFilePath: CodecTypes['pg/text@1']['output'] | null;
+      readonly convertedFormat: CodecTypes['pg/text@1']['output'] | null;
+      readonly convertedFileName: CodecTypes['pg/text@1']['output'] | null;
+      readonly convertedFilePath: CodecTypes['pg/text@1']['output'] | null;
+      readonly status: CodecTypes['pg/text@1']['output'];
+      readonly errorMessage: CodecTypes['pg/text@1']['output'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
+    };
     readonly Column: {
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly projectId: CodecTypes['pg/text@1']['output'] | null;
@@ -365,6 +380,21 @@ export type FieldOutputTypes = {
 };
 export type FieldInputTypes = {
   readonly public: {
+    readonly CadDrawing: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly deviceId: CodecTypes['pg/text@1']['input'];
+      readonly originalFileName: CodecTypes['pg/text@1']['input'];
+      readonly fileSizeBytes: CodecTypes['pg/int4@1']['input'];
+      readonly dwgVersion: CodecTypes['pg/text@1']['input'] | null;
+      readonly originalFilePath: CodecTypes['pg/text@1']['input'] | null;
+      readonly convertedFormat: CodecTypes['pg/text@1']['input'] | null;
+      readonly convertedFileName: CodecTypes['pg/text@1']['input'] | null;
+      readonly convertedFilePath: CodecTypes['pg/text@1']['input'] | null;
+      readonly status: CodecTypes['pg/text@1']['input'];
+      readonly errorMessage: CodecTypes['pg/text@1']['input'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
+      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
+    };
     readonly Column: {
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly projectId: CodecTypes['pg/text@1']['input'] | null;
@@ -488,6 +518,21 @@ export type FieldInputTypes = {
 };
 export type StorageColumnTypes = {
   readonly public: {
+    readonly cadDrawing: {
+      readonly convertedFileName: CodecTypes['pg/text@1']['output'] | null;
+      readonly convertedFilePath: CodecTypes['pg/text@1']['output'] | null;
+      readonly convertedFormat: CodecTypes['pg/text@1']['output'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+      readonly deviceId: CodecTypes['pg/text@1']['output'];
+      readonly dwgVersion: CodecTypes['pg/text@1']['output'] | null;
+      readonly errorMessage: CodecTypes['pg/text@1']['output'] | null;
+      readonly fileSizeBytes: CodecTypes['pg/int4@1']['output'];
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly originalFileName: CodecTypes['pg/text@1']['output'];
+      readonly originalFilePath: CodecTypes['pg/text@1']['output'] | null;
+      readonly status: CodecTypes['pg/text@1']['output'];
+      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
+    };
     readonly column: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly expectedEdge: CodecTypes['pg/float8@1']['output'] | null;
@@ -611,6 +656,21 @@ export type StorageColumnTypes = {
 };
 export type StorageColumnInputTypes = {
   readonly public: {
+    readonly cadDrawing: {
+      readonly convertedFileName: CodecTypes['pg/text@1']['input'] | null;
+      readonly convertedFilePath: CodecTypes['pg/text@1']['input'] | null;
+      readonly convertedFormat: CodecTypes['pg/text@1']['input'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
+      readonly deviceId: CodecTypes['pg/text@1']['input'];
+      readonly dwgVersion: CodecTypes['pg/text@1']['input'] | null;
+      readonly errorMessage: CodecTypes['pg/text@1']['input'] | null;
+      readonly fileSizeBytes: CodecTypes['pg/int4@1']['input'];
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly originalFileName: CodecTypes['pg/text@1']['input'];
+      readonly originalFilePath: CodecTypes['pg/text@1']['input'] | null;
+      readonly status: CodecTypes['pg/text@1']['input'];
+      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
+    };
     readonly column: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly expectedEdge: CodecTypes['pg/float8@1']['input'] | null;
@@ -891,6 +951,22 @@ export namespace Models {
     user: public_User;
     readonly [RelationKeys]?: 'project' | 'user';
   };
+  export type public_CadDrawing = {
+    id: CodecTypes['pg/text@1']['output'];
+    deviceId: CodecTypes['pg/text@1']['output'];
+    originalFileName: CodecTypes['pg/text@1']['output'];
+    fileSizeBytes: CodecTypes['pg/int4@1']['output'];
+    dwgVersion: CodecTypes['pg/text@1']['output'] | null;
+    originalFilePath: CodecTypes['pg/text@1']['output'] | null;
+    convertedFormat: CodecTypes['pg/text@1']['output'] | null;
+    convertedFileName: CodecTypes['pg/text@1']['output'] | null;
+    convertedFilePath: CodecTypes['pg/text@1']['output'] | null;
+    status: CodecTypes['pg/text@1']['output'];
+    errorMessage: CodecTypes['pg/text@1']['output'] | null;
+    createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+    updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
+    readonly [RelationKeys]?: never;
+  };
 }
 
 export declare const models: {
@@ -907,6 +983,7 @@ export declare const models: {
     DeliveryNote: Models.public_DeliveryNote;
     DeliveryNoteItem: Models.public_DeliveryNoteItem;
     Post: Models.public_Post;
+    CadDrawing: Models.public_CadDrawing;
   };
 };
 
@@ -928,6 +1005,97 @@ type ContractBase = Omit<
         readonly kind: 'postgres-schema';
         readonly entries: {
           readonly table: {
+            readonly cadDrawing: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly deviceId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly originalFileName: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly fileSizeBytes: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                };
+                readonly dwgVersion: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly originalFilePath: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly convertedFormat: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly convertedFileName: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly convertedFilePath: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly status: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', 'pending'>;
+                  };
+                };
+                readonly errorMessage: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly createdAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+                readonly updatedAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: false;
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'cadDrawing_deviceId_idx_a7d461e8';
+                  readonly prefix: 'cadDrawing_deviceId_idx';
+                  readonly columns: readonly ['deviceId'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'cadDrawing_deviceId_createdAt_idx_e2036dd5';
+                  readonly prefix: 'cadDrawing_deviceId_createdAt_idx';
+                  readonly columns: readonly ['deviceId', 'createdAt'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [];
+            };
             readonly column: {
               columns: {
                 readonly id: {
@@ -1879,11 +2047,97 @@ type ContractBase = Omit<
       readonly model: 'DeliveryNoteItem';
     };
     readonly post: { readonly namespace: 'public' & NamespaceId; readonly model: 'Post' };
+    readonly cadDrawing: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'CadDrawing';
+    };
   };
   readonly domain: {
     readonly namespaces: {
       readonly public: {
         readonly models: {
+          readonly CadDrawing: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly deviceId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly originalFileName: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly fileSizeBytes: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly dwgVersion: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly originalFilePath: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly convertedFormat: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly convertedFileName: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly convertedFilePath: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly status: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly errorMessage: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly createdAt: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
+              readonly updatedAt: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
+            };
+            readonly relations: Record<string, never>;
+            readonly storage: {
+              readonly table: 'cadDrawing';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly deviceId: { readonly column: 'deviceId' };
+                readonly originalFileName: { readonly column: 'originalFileName' };
+                readonly fileSizeBytes: { readonly column: 'fileSizeBytes' };
+                readonly dwgVersion: { readonly column: 'dwgVersion' };
+                readonly originalFilePath: { readonly column: 'originalFilePath' };
+                readonly convertedFormat: { readonly column: 'convertedFormat' };
+                readonly convertedFileName: { readonly column: 'convertedFileName' };
+                readonly convertedFilePath: { readonly column: 'convertedFilePath' };
+                readonly status: { readonly column: 'status' };
+                readonly errorMessage: { readonly column: 'errorMessage' };
+                readonly createdAt: { readonly column: 'createdAt' };
+                readonly updatedAt: { readonly column: 'updatedAt' };
+              };
+            };
+          };
           readonly Column: {
             readonly fields: {
               readonly id: {
@@ -2893,6 +3147,23 @@ type ContractBase = Omit<
     readonly executionHash: ExecutionHash;
     readonly mutations: {
       readonly defaults: readonly [
+        {
+          readonly ref: {
+            readonly namespace: 'public';
+            readonly table: 'cadDrawing';
+            readonly column: 'id';
+          };
+          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
+        },
+        {
+          readonly ref: {
+            readonly namespace: 'public';
+            readonly table: 'cadDrawing';
+            readonly column: 'updatedAt';
+          };
+          readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
+          readonly onUpdate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
+        },
         {
           readonly ref: {
             readonly namespace: 'public';

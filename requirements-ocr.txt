@@ -1,0 +1,6 @@
+easyocr>=1.7.2
+numpy>=1.26
+opencv-python-headless>=4.10
+Pillow>=10.0
+# Optional HEIC/HEIF image support, matching the supplied script.
+pillow-heif>=0.18

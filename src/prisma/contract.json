@@ -4,6 +4,10 @@
   "target": "postgres",
   "profileHash": "3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2",
   "roots": {
+    "cadDrawing": {
+      "model": "CadDrawing",
+      "namespace": "public"
+    },
     "column": {
       "model": "Column",
       "namespace": "public"
@@ -97,6 +101,147 @@
           }
         },
         "models": {
+          "CadDrawing": {
+            "fields": {
+              "convertedFileName": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "convertedFilePath": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "convertedFormat": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "deviceId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "dwgVersion": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "errorMessage": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "fileSizeBytes": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "originalFileName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "originalFilePath": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "convertedFileName": {
+                  "column": "convertedFileName"
+                },
+                "convertedFilePath": {
+                  "column": "convertedFilePath"
+                },
+                "convertedFormat": {
+                  "column": "convertedFormat"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "deviceId": {
+                  "column": "deviceId"
+                },
+                "dwgVersion": {
+                  "column": "dwgVersion"
+                },
+                "errorMessage": {
+                  "column": "errorMessage"
+                },
+                "fileSizeBytes": {
+                  "column": "fileSizeBytes"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "originalFileName": {
+                  "column": "originalFileName"
+                },
+                "originalFilePath": {
+                  "column": "originalFilePath"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "cadDrawing"
+            }
+          },
           "Column": {
             "fields": {
               "createdAt": {
@@ -1615,6 +1760,109 @@
       "public": {
         "entries": {
           "table": {
+            "cadDrawing": {
+              "columns": {
+                "convertedFileName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "convertedFilePath": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "convertedFormat": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "deviceId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "dwgVersion": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "errorMessage": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "fileSizeBytes": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "originalFileName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "originalFilePath": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "pending"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "deviceId",
+                    "createdAt"
+                  ],
+                  "name": "cadDrawing_deviceId_createdAt_idx_e2036dd5",
+                  "prefix": "cadDrawing_deviceId_createdAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "deviceId"
+                  ],
+                  "name": "cadDrawing_deviceId_idx_a7d461e8",
+                  "prefix": "cadDrawing_deviceId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "column": {
               "columns": {
                 "createdAt": {
@@ -2763,12 +3011,38 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "5f486946768368326e29e57f5d024ee5b79346849f9542ef43022922535418b8"
+    "storageHash": "498260f6d26db1767d9488d5030da86a3a3f998e0cfcb21fa0121513c13827c7"
   },
   "execution": {
-    "executionHash": "050ad7275a83b2c37a8edc126f4237dfc1beec0c6f831ea944a4824167ec2d13",
+    "executionHash": "045eb60e5f964620fe3e82ecd8e14f45a0f8ae9f84164d3066fdb5cdede0bf4a",
     "mutations": {
       "defaults": [
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "cadDrawing"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "cadDrawing"
+          }
+        },
         {
           "onCreate": {
             "id": "timestampNow",

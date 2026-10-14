@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { ColumnAnalyzerService } from './column-analyzer.service.js';
+import { ColumnAnalyzerService } from './column-analyzer.service';
 
 const MAX_IMAGE_SIZE_BYTES = 20 * 1024 * 1024;
 

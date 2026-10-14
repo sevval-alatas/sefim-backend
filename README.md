@@ -25,32 +25,63 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
-## CAD conversion API
+## CAD Conversion API (DWG -> Vector PDF / DXF)
 
-The backend exposes `POST /api/cad/convert` with a multipart field named `file`.
-Only `.dwg` files up to 100 MB are accepted. The API runs the LibreDWG
-`dwg2dxf` executable and returns a temporary download URL:
+The backend exposes `POST /api/cad/convert` with a multipart field named `file` (up to 100 MB).
 
+### 1. Vector PDF (Default for Mobile & Web)
+By default, the endpoint converts the drawing to a high-precision **Vector PDF** (using QCAD Teigha engine) and streams it directly to the client with `Content-Type: application/pdf`:
+
+```bash
+# Upload DWG and directly receive Vector PDF (A0 sheet size by default)
+curl -X POST "http://localhost:3000/api/cad/convert?paper=A0" \
+  -F "file=@/path/to/project.dwg" \
+  -o "project.pdf"
+```
+
+In Flutter:
+```dart
+var formData = FormData.fromMap({
+  'file': await MultipartFile.fromFile(dwgPath, filename: 'proje.dwg'),
+});
+
+var response = await dio.post(
+  'http://localhost:3000/api/cad/convert',
+  data: formData,
+  options: Options(responseType: ResponseType.bytes),
+);
+
+await File(pdfSavePath).writeAsBytes(response.data);
+// Render with pdfx or flutter_pdfview at 60 FPS with infinite zoom!
+```
+
+### 2. DXF Output
+If DXF format is explicitly required, pass `?format=dxf`:
+```bash
+curl -X POST "http://localhost:3000/api/cad/convert?format=dxf" \
+  -F "file=@/path/to/project.dwg" \
+  -o "project.dxf"
+```
+
+### 3. JSON Output (Temporary Download URL)
+If metadata or a deferred download is needed, pass `?format=json`:
 ```json
 {
   "success": true,
   "fileId": "8f32c1...",
-  "fileName": "proje.dxf",
+  "fileName": "project.pdf",
+  "format": "pdf",
   "downloadUrl": "/api/cad/files/8f32c1..."
 }
 ```
 
-Install LibreDWG on the server and make `dwg2dxf` available on `PATH`. Set
-`CAD_CONVERTER_COMMAND` when the executable has a different path. Conversion
-jobs time out after 60 seconds, at most three run concurrently, and generated
-files are removed after ten minutes. The in-memory file registry is intended
-for the initial single-process prototype; a queue and persistent metadata store
-should be introduced before running multiple backend instances.
+Download later via `GET /api/cad/files/:fileId`.
 
-The conversion does not use LibreDWG's `--minimal` mode, so drawing entities
-including `TEXT` and `MTEXT` are included in the DXF output. If the DXF contains
-these entities but they are not visible in Flutter, the Flutter DXF parser or
-renderer must support `TEXT`/`MTEXT` and the referenced font styles.
+### Diagnostics Endpoint
+Check available converters and engine status:
+```bash
+GET /api/cad/status
+```
 
 ## Column photo analysis API
 
@@ -74,43 +105,6 @@ For production, the response keeps `estimated: true`; `edge`/cover remains
 `null` until the column boundary and a physical scale are known. This contract
 can later be backed by a Python/OpenCV or hosted model without changing the
 Flutter endpoint.
-
-## Delivery-note OCR
-
-`POST /delivery-notes` accepts an image in the multipart `photo` field (up to
-15 MB) and requires `Authorization: Bearer <accessToken>`. The verified token's
-`sub` user ID is saved as `DeliveryNote.createdById`. It stores the image, calls the Python EasyOCR service, and saves the
-recognized text and extracted header fields to `DeliveryNote`. Start the OCR
-service in a separate process:
-
-```bash
-python3 -m venv .venv-ocr
-source .venv-ocr/bin/activate
-pip install -r requirements-ocr.txt
-python3 ocr/ocr_service.py
-```
-
-The first start downloads EasyOCR's Turkish and English models. The backend
-uses `OCR_SERVICE_URL` if set; otherwise it calls `http://127.0.0.1:8010`.
-The parser follows the supplied script's date, time, dispatch number, truck
-plate, concrete strength and production quantity rules. The supplied script
-does not extract order quantity or individual material rows, so those remain
-empty; `rawText` stores the full OCR output for review. OCR failures leave the
-uploaded delivery note in `failed` status.
-
-## Authentication
-
-The backend exposes:
-
-- `POST /auth/signup` with `email`, `password`, and optional `username`/`name`
-- `POST /auth/login` with `email` and `password`
-
-Both endpoints return an `accessToken` and the public user fields. Set a strong
-`JWT_SECRET` in the environment before starting the application. For local
-development, copy `.env.example` to `.env` and replace the placeholder with a
-long random value. After changing the Prisma contract, run
-`npm run contract:emit` and apply the database schema change with the Prisma
-migration workflow for the configured database.
 
 ## Project setup
 
