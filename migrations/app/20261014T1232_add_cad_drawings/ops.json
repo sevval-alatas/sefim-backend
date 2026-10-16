@@ -1,0 +1,119 @@
+[
+  {
+    "id": "table.cadDrawing",
+    "label": "Create table \"cadDrawing\"",
+    "summary": "Creates table \"cadDrawing\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "cadDrawing"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"cadDrawing\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cadDrawing\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"cadDrawing\"",
+        "sql": "CREATE TABLE \"public\".\"cadDrawing\" (\n  \"convertedFileName\" text,\n  \"convertedFilePath\" text,\n  \"convertedFormat\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"deviceId\" text NOT NULL,\n  \"dwgVersion\" text,\n  \"errorMessage\" text,\n  \"fileSizeBytes\" int4 NOT NULL,\n  \"id\" text NOT NULL,\n  \"originalFileName\" text NOT NULL,\n  \"originalFilePath\" text,\n  \"status\" text DEFAULT 'pending' NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"cadDrawing\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cadDrawing\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.cadDrawing.cadDrawing_deviceId_createdAt_idx_e2036dd5",
+    "label": "Create index \"cadDrawing_deviceId_createdAt_idx_e2036dd5\" on \"cadDrawing\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "cadDrawing_deviceId_createdAt_idx_e2036dd5",
+        "table": "cadDrawing"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"cadDrawing_deviceId_createdAt_idx_e2036dd5\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cadDrawing_deviceId_createdAt_idx_e2036dd5\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"cadDrawing_deviceId_createdAt_idx_e2036dd5\"",
+        "sql": "CREATE INDEX \"cadDrawing_deviceId_createdAt_idx_e2036dd5\" ON \"public\".\"cadDrawing\" (\"deviceId\", \"createdAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"cadDrawing_deviceId_createdAt_idx_e2036dd5\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cadDrawing_deviceId_createdAt_idx_e2036dd5\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.cadDrawing.cadDrawing_deviceId_idx_a7d461e8",
+    "label": "Create index \"cadDrawing_deviceId_idx_a7d461e8\" on \"cadDrawing\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "cadDrawing_deviceId_idx_a7d461e8",
+        "table": "cadDrawing"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"cadDrawing_deviceId_idx_a7d461e8\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cadDrawing_deviceId_idx_a7d461e8\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"cadDrawing_deviceId_idx_a7d461e8\"",
+        "sql": "CREATE INDEX \"cadDrawing_deviceId_idx_a7d461e8\" ON \"public\".\"cadDrawing\" (\"deviceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"cadDrawing_deviceId_idx_a7d461e8\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cadDrawing_deviceId_idx_a7d461e8\""
+        ]
+      }
+    ]
+  }
+]
