@@ -342,6 +342,8 @@ export type ConvertedFile = {
 export type PdfConversionOptions = {
   paper?: string;
   monochrome?: boolean;
+  plotStyle?: string;
+  layers?: string[];
 };
 
 export type ConversionResult = {
@@ -500,7 +502,9 @@ export class DwgConverterService {
       await writeFile(inputPath, file.buffer);
 
       const paperSize = options.paper?.toUpperCase() || 'A0';
-      this.logger.log(`DWG -> Vektörel PDF dönüştürme başlatıldı: ${file.originalname} (Pafta: ${paperSize})`);
+      this.logger.log(
+        `DWG -> Vektörel PDF dönüştürme başlatıldı: ${file.originalname} (Pafta: ${paperSize}, PlotStyle: ${options.plotStyle ?? 'yok'}, Katmanlar: ${options.layers?.join(', ') ?? 'tüm'})`,
+      );
 
       const args = [
         '-a',
@@ -517,8 +521,19 @@ export class DwgConverterService {
         inputPath,
       ];
 
+      // Renkli çıktı için monochrome kapalı bırakılmalı (-n bayrağı sadece monochrome=true olduğunda eklenir)
       if (options.monochrome) {
         args.push('-n');
+      }
+
+      // Plot style (CTB/STB) dosyası belirtilmişse QCAD'a aktar
+      if (options.plotStyle) {
+        args.push('-ps', options.plotStyle);
+      }
+
+      // Katman filtresi belirtildiyse QCAD'a bildir (desteklendiği takdirde)
+      if (options.layers && options.layers.length > 0) {
+        args.push('-layers', options.layers.join(','));
       }
 
       const result = await runConverterProcess(

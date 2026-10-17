@@ -80,6 +80,16 @@ export class CadController {
     type: Boolean,
     description: 'Siyah-beyaz yüksek kontrast modu',
   })
+  @ApiQuery({
+    name: 'plotStyle',
+    required: false,
+    description: 'QCAD plot style dosya yolu (CTB/STB) - renkli çizim içinör: /path/to/renkli.ctb',
+  })
+  @ApiQuery({
+    name: 'layers',
+    required: false,
+    description: 'Sadece bu katmanların PDF\'e alınması (virgülle ayrılmış, ör: Kolon,Duvar)',
+  })
   @ApiBody({
     schema: {
       type: 'object',
@@ -119,6 +129,8 @@ export class CadController {
     @Query('format') format?: string,
     @Query('paper') paper?: string,
     @Query('monochrome') monochrome?: string,
+    @Query('plotStyle') plotStyle?: string,
+    @Query('layers') layers?: string,
     @Query('deviceId') queryDeviceId?: string,
     @Headers('x-device-id') headerDeviceId?: string,
     @Body('deviceId') bodyDeviceId?: string,
@@ -132,9 +144,13 @@ export class CadController {
     // 1. Gelen DWG dosyasını uploads/cad kalıcı klasörüne ve veritabanına deviceId ile kaydet
     const drawing = await this.cadDrawingService.saveUploadedDrawing(file, deviceId);
 
+    const layerList = layers ? layers.split(',').map((l) => l.trim()).filter(Boolean) : undefined;
+
     const pdfOptions = {
       paper: paper || 'A0',
       monochrome: monochrome === 'true' || monochrome === '1',
+      plotStyle,
+      layers: layerList,
     };
 
     const targetFormat: 'auto' | 'dxf' | 'pdf' =
@@ -309,6 +325,8 @@ export class CadController {
     @Res() response: Response,
     @Query('paper') paper?: string,
     @Query('monochrome') monochrome?: string,
+    @Query('plotStyle') plotStyle?: string,
+    @Query('layers') layers?: string,
     @Query('deviceId') queryDeviceId?: string,
     @Headers('x-device-id') headerDeviceId?: string,
   ) {
@@ -318,9 +336,13 @@ export class CadController {
     const deviceId = (headerDeviceId || queryDeviceId || 'anonymous-device').trim();
     const drawing = await this.cadDrawingService.saveUploadedDrawing(file, deviceId);
 
+    const layerList = layers ? layers.split(',').map((l) => l.trim()).filter(Boolean) : undefined;
+
     const pdfOptions = {
       paper: paper || 'A0',
       monochrome: monochrome === 'true' || monochrome === '1',
+      plotStyle,
+      layers: layerList,
     };
     try {
       const result = await this.dwgConverterService.convertToPdf(file, pdfOptions);
