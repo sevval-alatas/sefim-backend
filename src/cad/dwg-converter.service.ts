@@ -4,7 +4,9 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { DwgParser, type DwgHeader, type ExportedDrawing, type DwgEntity } from './dwg-parser/dwg-parser.js';
+import { CadDocumentLoader, type ParseResult, type CadEntity } from './dwg-parser/cad-document-loader.js';
+import { VectorExporter, type ExportedDrawing } from './dwg-parser/vector-exporter.js';
+import type { DwgHeader } from './dwg-parser/section-manager.js';
 import {
   BadGatewayException,
   BadRequestException,
@@ -471,7 +473,7 @@ export class DwgConverterService {
     success: boolean;
     header?: DwgHeader;
     drawing?: ExportedDrawing;
-    entities?: DwgEntity[];
+    entities?: CadEntity[];
     error?: string;
   }> {
     if (!file || !file.buffer || file.buffer.length === 0) {
@@ -489,32 +491,43 @@ export class DwgConverterService {
 
     this.activeConversions += 1;
     try {
-      this.logger.log(`DWG özel parser ile ayrıştırılıyor: ${file.originalname}`);
+      this.logger.log(`DWG fabrika parser ile ayrıştırılıyor: ${file.originalname}`);
 
-      const parser = new DwgParser();
-      const result = await parser.parse(file.buffer);
+      const parseResult = CadDocumentLoader.loadDwg(file.buffer);
 
-      if (!result.success) {
-        this.logger.warn(`DWG ayrıştırma başarısız: ${file.originalname} - ${result.error}`);
+      if (!parseResult.success) {
+        this.logger.warn(`DWG ayrıştırma başarısız: ${file.originalname} - ${parseResult.error}`);
         throw new BadGatewayException({
           statusCode: 502,
           error: 'Bad Gateway',
-          message: `DWG dosyası ayrıştırılamadı. [Dosya: ${file.originalname}]. Sebep: ${result.error}`,
+          message: `DWG dosyası ayrıştırılamadı. [Dosya: ${file.originalname}]. Sebep: ${parseResult.error}`,
           details: {
             fileName: file.originalname,
             fileSizeBytes: file.buffer.length,
             signature: headerInfo.signature,
             dwgVersion: headerInfo.versionName,
-            error: result.error,
+            error: parseResult.error,
           },
         });
       }
 
+      const drawing = VectorExporter.export(parseResult.entities, parseResult.version ?? headerInfo.versionName);
+
       this.logger.log(
-        `DWG ayrıştırma başarılı: ${file.originalname} -> ${result.drawing?.elements.length ?? 0} eleman`,
+        `DWG ayrıştırma başarılı: ${file.originalname} -> ${drawing.elements.length} eleman`,
       );
 
-      return result;
+      return {
+        success: true,
+        header: {
+          signature: headerInfo.signature,
+          version: headerInfo.versionName,
+          isValid: headerInfo.isValidSignature,
+        },
+        drawing,
+        entities: parseResult.entities,
+        error: undefined,
+      };
     } finally {
       this.activeConversions -= 1;
     }

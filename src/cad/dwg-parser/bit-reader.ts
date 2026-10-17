@@ -70,6 +70,13 @@ export class BitReader {
     return value;
   }
 
+  readString(): string {
+    const len = this.readModularChar();
+    if (len <= 0) return '';
+    const bytes = this.readRawBytes(len);
+    return bytes.toString('utf8');
+  }
+
   readRawBytes(count: number): Buffer {
     if (count <= 0) return Buffer.alloc(0);
     if (this.bitOffset % 8 !== 0) {
