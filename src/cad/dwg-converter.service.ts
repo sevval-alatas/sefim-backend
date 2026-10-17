@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { DwgParser, type DwgHeader, type ExportedDrawing, type DwgEntity } from './dwg-parser/dwg-parser.js';
 import {
   BadGatewayException,
   BadRequestException,
@@ -463,6 +464,59 @@ export class DwgConverterService {
       pdfResult.fallbackUsed = true;
       this.logger.log(`[Auto CAD Motoru] Vektörel PDF yedek dönüştürme başarılı: ${file.originalname}`);
       return pdfResult;
+    }
+  }
+
+  async parseDwg(file: Express.Multer.File): Promise<{
+    success: boolean;
+    header?: DwgHeader;
+    drawing?: ExportedDrawing;
+    entities?: DwgEntity[];
+    error?: string;
+  }> {
+    if (!file || !file.buffer || file.buffer.length === 0) {
+      throw new BadRequestException('DWG dosyası boş veya yüklenemedi');
+    }
+
+    const headerInfo = inspectDwgHeader(file.buffer);
+    if (!headerInfo.isValidSignature) {
+      this.throwInvalidDwgException(file, headerInfo);
+    }
+
+    if (this.activeConversions >= MAX_CONCURRENT_CONVERSIONS) {
+      throw new ServiceUnavailableException('Dönüştürme kapasitesi şu an dolu, lütfen biraz sonra tekrar deneyin');
+    }
+
+    this.activeConversions += 1;
+    try {
+      this.logger.log(`DWG özel parser ile ayrıştırılıyor: ${file.originalname}`);
+
+      const parser = new DwgParser();
+      const result = await parser.parse(file.buffer);
+
+      if (!result.success) {
+        this.logger.warn(`DWG ayrıştırma başarısız: ${file.originalname} - ${result.error}`);
+        throw new BadGatewayException({
+          statusCode: 502,
+          error: 'Bad Gateway',
+          message: `DWG dosyası ayrıştırılamadı. [Dosya: ${file.originalname}]. Sebep: ${result.error}`,
+          details: {
+            fileName: file.originalname,
+            fileSizeBytes: file.buffer.length,
+            signature: headerInfo.signature,
+            dwgVersion: headerInfo.versionName,
+            error: result.error,
+          },
+        });
+      }
+
+      this.logger.log(
+        `DWG ayrıştırma başarılı: ${file.originalname} -> ${result.drawing?.elements.length ?? 0} eleman`,
+      );
+
+      return result;
+    } finally {
+      this.activeConversions -= 1;
     }
   }
 

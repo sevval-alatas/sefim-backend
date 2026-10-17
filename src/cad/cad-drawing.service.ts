@@ -114,7 +114,7 @@ export class CadDrawingService {
   async markConversionSuccess(
     drawingId: string,
     params: {
-      convertedFormat: 'dxf' | 'pdf';
+      convertedFormat: 'dxf' | 'pdf' | 'json';
       convertedFileName: string;
       tempOutputPath: string;
     },

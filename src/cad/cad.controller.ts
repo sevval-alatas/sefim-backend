@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   Body,
   Controller,
@@ -384,6 +385,83 @@ export class CadController {
       response.download(result.outputPath, result.fileName, async () => {
         await this.dwgConverterService.cleanup(result.fileId);
       });
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      await this.cadDrawingService.markConversionFailed(drawing.id, errorMsg);
+      throw error;
+    }
+  }
+
+  @Post('parse')
+  @ApiOperation({
+    summary: 'DWG dosyasını özel DWG parser ile ayrıştırıp vektör verisini JSON olarak döner',
+    description: 'QCAD/LibreDWQ dış araçlarına bağlanmadan DWG dosyasını doğrudan ayrıştırır ve mobil için JSON vektör elemanları üretir.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiProduces('application/json')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: '.dwg uzantılı CAD çizim dosyası (maks. 100 MB)',
+        },
+      },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'DWG dosyasından ayrıştırılmış vektör verisi (JSON)' })
+  @ApiResponse({ status: 400, description: 'Geçersiz dosya veya DWG formatında değil.' })
+  @ApiResponse({ status: 502, description: 'DWG ayrıştırma işlemi başarısız oldu.' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
+      fileFilter: (_request, file, callback) => {
+        const hasValidExt = /\.dwg$/i.test(file.originalname);
+        if (!hasValidExt) {
+          return callback(new BadRequestException('Sadece .dwg uzantılı CAD dosyaları kabul edilir.'), false);
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  async parseDwg(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('deviceId') queryDeviceId?: string,
+    @Headers('x-device-id') headerDeviceId?: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException('"file" alanında geçerli bir CAD dosyası yüklenmelidir.');
+    }
+
+    const deviceId = (headerDeviceId || queryDeviceId || 'anonymous-device').trim();
+    const drawing = await this.cadDrawingService.saveUploadedDrawing(file, deviceId);
+
+    try {
+      const result = await this.dwgConverterService.parseDwg(file);
+
+      if (!result.success) {
+        await this.cadDrawingService.markConversionFailed(drawing.id, result.error || 'DWG ayrıştırılamadı');
+        throw new BadGatewayException(result.error || 'DWG dosyası ayrıştırılamadı.');
+      }
+
+      await this.cadDrawingService.markConversionSuccess(drawing.id, {
+        convertedFormat: 'pdf',
+        convertedFileName: `${drawing.originalFileName.replace(/\.dwg$/i, '')}.json`,
+        tempOutputPath: '',
+      });
+
+      return {
+        success: true,
+        drawingId: drawing.id,
+        deviceId,
+        header: result.header,
+        drawing: result.drawing,
+        entityCount: result.entities?.length ?? 0,
+      };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       await this.cadDrawingService.markConversionFailed(drawing.id, errorMsg);
