@@ -63,19 +63,69 @@ curl -X POST "http://localhost:3000/api/cad/convert?format=dxf" \
   -o "project.dxf"
 ```
 
+### Standalone Python DWG -> DXF conversion
+For local batch/manual conversion, the Python CLI in
+[`python/dwg_worker/convert_to_dxf.py`](./python/dwg_worker/convert_to_dxf.py)
+uses LibreDWG to convert the file and `ezdxf` to confirm that the output can be
+read, audit its structure, and write a JSON report. The input DWG is never
+modified. If the preferred DXF version fails validation, it tries LibreDWG's
+native version, R2000 compatibility, and minimal-DXF modes.
+
+Alongside DXF, the parser creates `project.scene.json` for mobile rendering.
+The versioned `sefim-cad-scene/1` model includes drawing extents, unit code,
+layer visibility/style, block definitions, and common 2D entities (lines,
+polylines including bulges, arcs, circles, ellipses, splines, points, text,
+dimensions, and inserts). `GET /api/cad/drawings/:id/scene` serves the saved
+model; the `format=json` conversion response includes `mobileSceneUrl`.
+Unsupported entities and the scene-size cap are reported in `warnings`; use
+the DXF URL to access the complete converted drawing.
+
+Install LibreDWG (`libredwg-tools` on supported Debian/Ubuntu releases) and the
+Python dependencies in the project environment:
+
+```bash
+python3 -m venv .venv-dwg
+.venv-dwg/bin/python -m pip install -r python/dwg_worker/requirements.txt
+.venv-dwg/bin/python python/dwg_worker/convert_to_dxf.py /path/to/project.dwg
+```
+
+This creates `project.dxf`, `project.scene.json`, and `project.report.json`
+beside the source. Existing outputs are protected by default; use `--overwrite` to replace them. Use
+`--version r2013` to select another preferred DXF version, `--converter
+/path/to/dwg2dxf` when it is not on `PATH`, or `--help` for all options.
+LibreDWG is GPL-3.0-or-later; review the license implications before bundling
+it with a commercial product. A readable DXF and a clean structural audit do
+not guarantee lossless fidelity: proxy/AEC objects, dimensions, fonts, and
+other application-specific content still need comparison with the source in a
+CAD viewer.
+
+The same converter is called automatically by `POST /api/cad/convert` when
+`format=dxf` is requested (and by the default `auto` flow when it chooses DXF).
+Alternative QCAD/LibreDWG outputs are also checked with `ezdxf` after any
+viewing optimization, so the API does not return an unreadable DXF.
+Set `DWG_PYTHON_PATH=.venv-dwg/bin/python` in the backend environment so the
+server uses the project's interpreter and installed `ezdxf` dependency. On
+Windows, point it to `.venv-dwg/Scripts/python.exe`. `GET /api/cad/status`
+reports whether Python, `ezdxf`, the script, and `dwg2dxf` are available.
+This is the project's own CAD scene parser/API model, but DWG binary decoding
+still relies on LibreDWG; it is not a from-scratch implementation of every
+proprietary DWG version or custom AEC object.
+
 ### 3. JSON Output (Temporary Download URL)
 If metadata or a deferred download is needed, pass `?format=json`:
 ```json
 {
   "success": true,
   "fileId": "8f32c1...",
-  "fileName": "project.pdf",
-  "format": "pdf",
-  "downloadUrl": "/api/cad/files/8f32c1..."
+  "fileName": "project.dxf",
+  "format": "dxf",
+  "downloadUrl": "/api/cad/drawings/<drawing-id>/download",
+  "mobileSceneUrl": "/api/cad/drawings/<drawing-id>/scene"
 }
 ```
 
-Download later via `GET /api/cad/files/:fileId`.
+Download the saved DXF and mobile scene from the returned URLs. The temporary
+conversion artifact is also available via `GET /api/cad/files/:fileId`.
 
 ### Diagnostics Endpoint
 Check available converters and engine status:

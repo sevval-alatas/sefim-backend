@@ -44,7 +44,8 @@ export class CadController {
   @Get('status')
   @ApiOperation({
     summary: 'CAD dönüştürücü durumunu kontrol eder',
-    description: 'Sistemde Vektörel PDF (QCAD dwg2pdf) ve DXF dönüştürücülerin durumunu raporlar.',
+    description:
+      'QCAD PDF motoru, LibreDWG ve Python/ezdxf DXF doğrulama ortamının kullanılabilirliğini raporlar.',
   })
   @ApiResponse({ status: 200, description: 'Dönüştürücü servis durumu' })
   async getStatus() {
@@ -57,8 +58,8 @@ export class CadController {
     description:
       'Mobil uygulama ve web görüntüleme için optimize edilmiştir. ' +
       'Varsayılan olarak (veya format=pdf) doğrudan Vektörel PDF dosyası indirilir (sonsuz zoom, 60 FPS, piksellenmeyen çizim). ' +
-      'format=dxf verilirse DXF dosyası döner. ' +
-      'format=json verilirse dosya indirme URL\'si içeren JSON yanıtı döner.',
+      'format=dxf verilirse DXF dosyası ve mobil JSON sahne modeli üretilir. ' +
+      'format=json verilirse DXF indirme ve mobil sahne URL\'lerini içeren JSON yanıtı döner.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiProduces('application/pdf', 'application/dxf', 'application/json')
@@ -66,7 +67,7 @@ export class CadController {
     name: 'format',
     required: false,
     enum: ['pdf', 'dxf', 'json'],
-    description: 'Çıktı biçimi: "pdf" (varsayılan, doğrudan Vektörel PDF iner), "dxf" (DXF iner) veya "json" (indirme URL\'si döner)',
+    description: 'Çıktı biçimi: "pdf" (vektörel PDF), "dxf" (DXF; mobil JSON sahnesi de saklanır) veya "json" (indirme bağlantıları)',
   })
   @ApiQuery({
     name: 'paper',
@@ -148,6 +149,7 @@ export class CadController {
         convertedFormat: result.format,
         convertedFileName: result.fileName,
         tempOutputPath: result.outputPath,
+        mobileScenePath: result.mobileScenePath,
       });
 
       // JSON formatı istendiyse indirme bağlantısıyla yanıt ver
@@ -162,6 +164,9 @@ export class CadController {
           fallbackUsed: Boolean(result.fallbackUsed),
           strategyUsed: result.strategyUsed,
           downloadUrl: `/api/cad/drawings/${drawing.id}/download`,
+          mobileSceneUrl: result.mobileScenePath
+            ? `/api/cad/drawings/${drawing.id}/scene`
+            : undefined,
           tempDownloadUrl: result.downloadUrl,
         });
       }
@@ -172,12 +177,15 @@ export class CadController {
       response.setHeader('X-CAD-Format', result.format);
       response.setHeader('X-Drawing-Id', drawing.id);
       response.setHeader('X-Device-Id', deviceId);
+      if (result.mobileScenePath) {
+        response.setHeader('X-CAD-Mobile-Scene-URL', `/api/cad/drawings/${drawing.id}/scene`);
+      }
       if (result.fallbackUsed) {
         response.setHeader('X-CAD-Fallback', 'true');
       }
       response.setHeader(
         'Access-Control-Expose-Headers',
-        'X-CAD-Format, X-CAD-Fallback, X-Drawing-Id, X-Device-Id, Content-Disposition',
+        'X-CAD-Format, X-CAD-Fallback, X-CAD-Mobile-Scene-URL, X-Drawing-Id, X-Device-Id, Content-Disposition',
       );
       response.download(result.outputPath, result.fileName, async (err) => {
         if (err) {
@@ -218,6 +226,27 @@ export class CadController {
       throw new NotFoundException(`Çizim bulunamadı [ID: ${id}]`);
     }
     return this.cadDrawingService.toResponseDto(drawing);
+  }
+
+  @Get('drawings/:id/scene')
+  @ApiOperation({
+    summary: 'Mobil CAD görüntüleyici için JSON sahne modelini indirir',
+    description: 'Katman, çizim sınırları, bloklar ve desteklenen 2D geometrileri içeren JSON döndürür.',
+  })
+  @ApiParam({ name: 'id', description: 'Çizim ID (UUID)' })
+  @ApiProduces('application/json')
+  async downloadMobileScene(@Param('id') id: string, @Res() response: Response) {
+    const drawing = await this.cadDrawingService.getDrawingById(id);
+    if (!drawing) {
+      throw new NotFoundException(`Çizim bulunamadı [ID: ${id}]`);
+    }
+    const scenePath = this.cadDrawingService.getMobileScenePath(drawing.id);
+    if (!existsSync(scenePath)) {
+      throw new NotFoundException('Bu çizim için mobil sahne modeli bulunamadı.');
+    }
+    response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    response.setHeader('X-Drawing-Id', drawing.id);
+    response.download(scenePath, 'mobile-scene.json');
   }
 
   @Get('drawings/:id/download')
@@ -375,12 +404,16 @@ export class CadController {
         convertedFormat: 'dxf',
         convertedFileName: result.fileName,
         tempOutputPath: result.outputPath,
+        mobileScenePath: result.mobileScenePath,
       });
 
       response.setHeader('Content-Type', 'application/dxf');
       response.setHeader('X-CAD-Format', 'dxf');
       response.setHeader('X-Drawing-Id', drawing.id);
       response.setHeader('X-Device-Id', deviceId);
+      if (result.mobileScenePath) {
+        response.setHeader('X-CAD-Mobile-Scene-URL', `/api/cad/drawings/${drawing.id}/scene`);
+      }
       response.download(result.outputPath, result.fileName, async () => {
         await this.dwgConverterService.cleanup(result.fileId);
       });

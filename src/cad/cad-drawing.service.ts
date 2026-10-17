@@ -36,6 +36,7 @@ export interface CadDrawingResponseDto {
   updatedAt: string;
   downloadUrl?: string;
   originalDownloadUrl?: string;
+  mobileSceneUrl?: string;
 }
 
 @Injectable()
@@ -117,6 +118,7 @@ export class CadDrawingService {
       convertedFormat: 'dxf' | 'pdf';
       convertedFileName: string;
       tempOutputPath: string;
+      mobileScenePath?: string;
     },
   ): Promise<void> {
     const drawingFolder = join(this.storageDir, drawingId);
@@ -131,6 +133,16 @@ export class CadDrawingService {
       }
     } catch (copyErr) {
       this.logger.warn(`Kalıcı dönüştürülmüş dosya kopyalanamadı: ${(copyErr as Error).message}`);
+    }
+
+    if (params.mobileScenePath) {
+      if (!existsSync(params.mobileScenePath)) {
+        throw new Error('Mobil sahne JSON dosyası dönüştürme çıktısında bulunamadı.');
+      }
+      await copyFile(
+        params.mobileScenePath,
+        join(drawingFolder, 'mobile-scene.json'),
+      );
     }
 
     try {
@@ -223,6 +235,7 @@ export class CadDrawingService {
   }
 
   toResponseDto(record: CadDrawingRecord): CadDrawingResponseDto {
+    const mobileScenePath = join(this.storageDir, record.id, 'mobile-scene.json');
     return {
       id: record.id,
       deviceId: record.deviceId,
@@ -237,7 +250,13 @@ export class CadDrawingService {
       updatedAt: record.updatedAt,
       downloadUrl: record.convertedFileName ? `/api/cad/drawings/${record.id}/download` : undefined,
       originalDownloadUrl: `/api/cad/drawings/${record.id}/download?type=original`,
+      mobileSceneUrl: existsSync(mobileScenePath)
+        ? `/api/cad/drawings/${record.id}/scene`
+        : undefined,
     };
   }
-}
 
+  getMobileScenePath(drawingId: string): string {
+    return join(this.storageDir, drawingId, 'mobile-scene.json');
+  }
+}

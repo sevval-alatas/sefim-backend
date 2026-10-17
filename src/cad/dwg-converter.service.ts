@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { access, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   BadGatewayException,
@@ -222,52 +222,60 @@ export async function isValidDxfFile(filePath: string): Promise<boolean> {
     } finally {
       await fd.close();
     }
+
   } catch {
     return false;
   }
 }
 
-/**
- * DXF dosyasını mobil görüntüleme için optimize eder:
- * 1. $LWDISPLAY değerini 0 (hairline / ince çizgi) yapar.
- * 2. 0.20 mm üzerindeki aşırı kalın çizgileri 0.09 mm ince çizgiye sınırlandırır.
- * 3. Kalın polyline genişliklerini sıfırlar (yazıların üzerine binmesini önler).
- * 4. MTEXT içindeki karmaşık AutoCAD biçimlendirme artıklarını (\P, font kodları) temizler.
- */
-export async function optimizeDxfForViewing(dxfPath: string): Promise<void> {
-  try {
-    const content = await readFile(dxfPath, 'utf8');
-
-    let optimized = content;
-
-    // $LWDISPLAY değerini 0 (hairline) yap
-    if (optimized.includes('$LWDISPLAY')) {
-      optimized = optimized.replace(
-        /(\$LWDISPLAY\s*\r?\n\s*290\s*\r?\n\s*)(1)/g,
-        '$10',
-      );
-    }
-
-    // Kalın lineweight tanımlarını (grup 370) 0'a (0.00 mm hairline ince çizgi) sınırla
-    optimized = optimized.replace(
-      /(\r?\n\s*370\s*\r?\n\s*)(\d+)/g,
-      '$10',
-    );
-
-    // Sadece LWPOLYLINE sabit genişliğini (grup 43) sıfırla (grup 40 metin yüksekliği ve çember yarıçapıdır, asla sıfırlanmamalı!)
-    optimized = optimized.replace(
-      /(\r?\n\s*43\s*\r?\n\s*)([0-9]+(?:\.[0-9]+)?)/g,
-      '$10.0',
-    );
-
-    // MTEXT biçimlendirme artıklarını temizle
-    optimized = optimized.replace(/\\P/g, ' ');
-    optimized = optimized.replace(/\\[A-Za-z][^;]*;/g, '');
-
-    await writeFile(dxfPath, optimized, 'utf8');
-  } catch {
-    // Post-processing hatası durumunda orijinal DXF korunur
+function isCommandAvailable(command: string, pathValue: string): boolean {
+  if (command.includes('/') || command.includes('\\')) {
+    return existsSync(command);
   }
+  return pathValue.split(delimiter).some((directory) => existsSync(join(directory, command)));
+}
+
+export async function optimizeDxfForViewing(dxfPath: string): Promise<void> {
+  const content = await readFile(dxfPath, 'utf8');
+  const newline = content.match(/\r\n|\n|\r/)?.[0] ?? '\n';
+  const lines = content.split(/\r\n|\n|\r/);
+  let section = '';
+  let entityType = '';
+  let waitingForSectionName = false;
+  let headerVariable = '';
+
+  for (let index = 0; index + 1 < lines.length; index += 2) {
+    const groupCode = Number(lines[index].trim());
+    const value = lines[index + 1];
+    if (!Number.isInteger(groupCode)) continue;
+
+    if (groupCode === 0) {
+      if (value === 'SECTION') {
+        waitingForSectionName = true;
+        entityType = '';
+      } else if (value === 'ENDSEC') {
+        section = '';
+        entityType = '';
+        waitingForSectionName = false;
+      } else if (section === 'ENTITIES') {
+        entityType = value.trim();
+      }
+    } else if (waitingForSectionName && groupCode === 2) {
+      section = value.trim();
+      waitingForSectionName = false;
+    } else if (section === 'HEADER' && groupCode === 9) {
+      headerVariable = value.trim();
+    } else if (section === 'HEADER' && groupCode === 290 && headerVariable === '$LWDISPLAY') {
+      if (value.trim() === '1') lines[index + 1] = '0';
+      headerVariable = '';
+    } else if (groupCode === 370 && /^-?\d+$/.test(value.trim())) {
+      lines[index + 1] = '0';
+    } else if (section === 'ENTITIES' && entityType === 'LWPOLYLINE' && groupCode === 43) {
+      lines[index + 1] = '0.0';
+    }
+  }
+
+  await writeFile(dxfPath, lines.join(newline), 'utf8');
 }
 
 function runConverterProcess(
@@ -347,6 +355,7 @@ export type ConversionResult = {
   jobDirectory: string;
   downloadUrl: string;
   format: 'pdf' | 'dxf';
+  mobileScenePath?: string;
   strategyUsed?: string;
   fallbackUsed?: boolean;
 };
@@ -357,6 +366,26 @@ export class DwgConverterService {
   private readonly dxfVersion = process.env.CAD_DXF_VERSION ?? 'r2018';
   private readonly convertedFiles = new Map<string, ConvertedFile>();
   private activeConversions = 0;
+
+  resolvePythonCommand(): string {
+    const configuredPath = process.env.DWG_PYTHON_PATH;
+    if (configuredPath) {
+      return resolve(configuredPath);
+    }
+
+    const projectVenvPython = join(
+      process.cwd(),
+      '.venv-dwg',
+      process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
+    );
+    return existsSync(projectVenvPython) ? projectVenvPython : 'python3';
+  }
+
+  resolvePythonDxfScript(): string {
+    return process.env.DWG_DXF_CONVERTER_SCRIPT
+      ? resolve(process.env.DWG_DXF_CONVERTER_SCRIPT)
+      : join(process.cwd(), 'python', 'dwg_worker', 'convert_to_dxf.py');
+  }
 
   resolveConverterCommand(): string {
     return this.resolvePdfConverterCommand() ?? this.resolveDxfConverterCommand();
@@ -415,9 +444,29 @@ export class DwgConverterService {
   async checkConverterAvailable(): Promise<{
     pdfConverter: { available: boolean; command?: string };
     dxfConverter: { available: boolean; command: string };
+    pythonDxfConverter: { available: boolean; command: string; script: string; reason?: string };
   }> {
     const pdfCommand = this.resolvePdfConverterCommand();
     const dxfCommand = this.resolveDxfConverterCommand();
+    const pythonCommand = this.resolvePythonCommand();
+    const pythonScript = this.resolvePythonDxfScript();
+    const pathValue = this.getProcessEnv().PATH ?? '';
+    const pythonAvailable = isCommandAvailable(pythonCommand, pathValue);
+    const scriptAvailable = existsSync(pythonScript);
+    const dxfAvailable = isCommandAvailable(dxfCommand, pathValue);
+    const pythonDependencies = pythonAvailable && scriptAvailable
+      ? await runConverterProcess(
+          pythonCommand,
+          ['-c', 'import ezdxf'],
+          process.cwd(),
+          5_000,
+          this.getProcessEnv(),
+        )
+      : undefined;
+    const pythonPackagesAvailable =
+      pythonDependencies !== undefined
+      && pythonDependencies.exitCode === 0
+      && !pythonDependencies.timedOut;
 
     return {
       pdfConverter: {
@@ -425,8 +474,22 @@ export class DwgConverterService {
         command: pdfCommand ?? undefined,
       },
       dxfConverter: {
-        available: true,
+        available: dxfAvailable,
         command: dxfCommand,
+      },
+      pythonDxfConverter: {
+        available: pythonAvailable && scriptAvailable && dxfAvailable && pythonPackagesAvailable,
+        command: pythonCommand,
+        script: pythonScript,
+        reason: !pythonAvailable
+          ? 'Python interpreter was not found'
+          : !scriptAvailable
+            ? 'Python converter script was not found'
+            : !dxfAvailable
+              ? 'dwg2dxf was not found'
+              : !pythonPackagesAvailable
+                ? 'Python dependency ezdxf is missing or could not be imported'
+                : undefined,
       },
     };
   }
@@ -607,6 +670,7 @@ export class DwgConverterService {
     const jobDirectory = join(tmpdir(), 'sefim-cad', fileId);
     const inputPath = join(jobDirectory, 'input.dwg');
     const outputPath = join(jobDirectory, 'output.dxf');
+    const mobileScenePath = join(jobDirectory, 'output.scene.json');
 
     try {
       await mkdir(jobDirectory, { recursive: true });
@@ -619,9 +683,32 @@ export class DwgConverterService {
         name: string;
         cmd: string;
         args: string[];
+        pythonWorker?: boolean;
       };
 
       const strategies: DxfStrategy[] = [];
+      const pythonReportPath = join(jobDirectory, 'conversion.report.json');
+      strategies.push({
+        name: 'Python LibreDWG with ezdxf validation',
+        cmd: this.resolvePythonCommand(),
+        args: [
+          this.resolvePythonDxfScript(),
+          inputPath,
+          '--output',
+          outputPath,
+          '--report',
+          pythonReportPath,
+          '--converter',
+          this.resolveDxfConverterCommand(),
+          '--scene-output',
+          mobileScenePath,
+          '--version',
+          this.dxfVersion,
+          '--timeout',
+          '25',
+        ],
+        pythonWorker: true,
+      });
 
       // 1. Önce en kaliteli ve kayıpsız OpenDesign Teigha motorunu (dwg2dwg) dene
       if (qcadDwg2Dwg) {
@@ -690,6 +777,25 @@ export class DwgConverterService {
           continue;
         }
 
+        let pythonReport: { success?: boolean; strategy?: string; error?: string } | undefined;
+        if (strategy.pythonWorker) {
+          try {
+            pythonReport = JSON.parse(result.stdout) as typeof pythonReport;
+          } catch {
+            pythonReport = undefined;
+          }
+          if (result.exitCode !== 0 || !pythonReport?.success) {
+            attemptLogs.push({
+              strategy: strategy.name,
+              exitCode: result.exitCode ?? 'UNKNOWN',
+              error: pythonReport?.error ?? 'Python converter returned an invalid response',
+              stdout: result.stdout?.trim(),
+              stderr: result.stderr?.trim(),
+            });
+            continue;
+          }
+        }
+
         const generatedDxf = await findGeneratedFile(jobDirectory, outputPath, 'dxf');
         if (generatedDxf && (await isValidDxfFile(generatedDxf))) {
           if (generatedDxf !== outputPath) {
@@ -697,12 +803,43 @@ export class DwgConverterService {
           }
           finalPath = outputPath;
 
-          // DXF dosyasını optimize et:
-          // $LWDISPLAY 0 yap, kalın çizgileri incelt, yazıları temizle
-          await optimizeDxfForViewing(finalPath);
+          if (!strategy.pythonWorker) {
+            await optimizeDxfForViewing(finalPath);
+            const validation = await runConverterProcess(
+              this.resolvePythonCommand(),
+              [
+                this.resolvePythonDxfScript(),
+                finalPath,
+                '--validate-only',
+                '--scene-output',
+                mobileScenePath,
+              ],
+              jobDirectory,
+              CONVERSION_TIMEOUT_MS,
+              this.getProcessEnv(),
+            );
+            let validationReport: { success?: boolean; error?: string } | undefined;
+            try {
+              validationReport = JSON.parse(validation.stdout) as typeof validationReport;
+            } catch {
+              validationReport = undefined;
+            }
+            if (validation.timedOut || validation.exitCode !== 0 || !validationReport?.success) {
+              attemptLogs.push({
+                strategy: strategy.name,
+                exitCode: validation.timedOut ? 'VALIDATION_TIMEOUT' : validation.exitCode ?? 'UNKNOWN',
+                error: validationReport?.error ?? 'DXF failed Python/ezdxf structural validation',
+                stdout: validation.stdout?.trim(),
+                stderr: validation.stderr?.trim(),
+              });
+              continue;
+            }
+          }
 
           const stats = await stat(finalPath);
-          successStrategy = strategy.name;
+          successStrategy = strategy.pythonWorker
+            ? `${strategy.name} (${pythonReport?.strategy ?? 'validated DXF'})`
+            : strategy.name;
           this.logger.log(
             `DWG -> DXF başarılı ve optimize edildi (${strategy.name}): ${file.originalname} -> ${(stats.size / 1024).toFixed(1)} KB DXF`,
           );
@@ -743,6 +880,10 @@ export class DwgConverterService {
         });
       }
 
+      if (!existsSync(mobileScenePath)) {
+        throw new BadGatewayException('DXF için mobil sahne JSON çıktısı üretilemedi');
+      }
+
       const dxfFileName = this.toDxfName(file.originalname);
       this.convertedFiles.set(fileId, {
         path: finalPath,
@@ -760,6 +901,7 @@ export class DwgConverterService {
         jobDirectory,
         downloadUrl: `/api/cad/files/${fileId}`,
         format: 'dxf',
+        mobileScenePath,
         strategyUsed: successStrategy,
       };
     } catch (error) {

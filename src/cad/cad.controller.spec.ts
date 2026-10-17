@@ -49,6 +49,11 @@ describe('CadController', () => {
     checkConverterAvailable: jest.fn().mockResolvedValue({
       pdfConverter: { available: true, command: '/Applications/QCAD.app/Contents/Resources/dwg2pdf' },
       dxfConverter: { available: true, command: 'dwg2dxf' },
+      pythonDxfConverter: {
+        available: true,
+        command: '.venv-dwg/bin/python',
+        script: 'python/dwg_worker/convert_to_dxf.py',
+      },
     }),
     convert: jest.fn().mockImplementation(async (_file, format) => {
       if (format === 'pdf') {
@@ -68,6 +73,7 @@ describe('CadController', () => {
         jobDirectory: '/tmp/sefim-cad/mock-file-id',
         downloadUrl: '/api/cad/files/mock-file-id',
         format: 'dxf',
+        mobileScenePath: '/tmp/sefim-cad/mock-file-id/output.scene.json',
       };
     }),
     convertToPdf: jest.fn().mockResolvedValue({
@@ -164,6 +170,7 @@ describe('CadController', () => {
           format: 'dxf',
           fallbackUsed: false,
           downloadUrl: '/api/cad/drawings/mock-drawing-uuid/download',
+          mobileSceneUrl: '/api/cad/drawings/mock-drawing-uuid/scene',
           tempDownloadUrl: '/api/cad/files/mock-file-id',
         }),
       );
