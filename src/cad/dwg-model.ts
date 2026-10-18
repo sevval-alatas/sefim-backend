@@ -143,6 +143,118 @@ export class CadLwPolyline extends CadObject {
   accept(visitor: CadObjectVisitor): void { visitor.visitLwPolyline(this); }
 }
 
+/** Nokta varlığı */
+export class CadPoint extends CadObject {
+  constructor(
+    id: CadObjectId,
+    public readonly x: number,
+    public readonly y: number,
+    layer: string,
+    colorIndex: number = 256,
+    linetype: string = 'BYLAYER',
+    ownerId: CadObjectId | null = null,
+  ) {
+    super(id, layer, colorIndex, linetype, ownerId);
+  }
+  accept(visitor: CadObjectVisitor): void { visitor.visitPoint(this); }
+}
+
+/** Blok referansı (INSERT) */
+export class CadInsert extends CadObject {
+  constructor(
+    id: CadObjectId,
+    public readonly insertX: number,
+    public readonly insertY: number,
+    public readonly blockName: string,
+    layer: string,
+    colorIndex: number = 256,
+    linetype: string = 'BYLAYER',
+    ownerId: CadObjectId | null = null,
+  ) {
+    super(id, layer, colorIndex, linetype, ownerId);
+  }
+  accept(visitor: CadObjectVisitor): void { visitor.visitInsert(this); }
+}
+
+/** Çoklu çizgi (POLYLINE) */
+export class CadPolyline extends CadObject {
+  constructor(
+    id: CadObjectId,
+    public readonly vertices: [number, number][],
+    layer: string,
+    colorIndex: number = 256,
+    linetype: string = 'BYLAYER',
+    ownerId: CadObjectId | null = null,
+  ) {
+    super(id, layer, colorIndex, linetype, ownerId);
+  }
+  accept(visitor: CadObjectVisitor): void { visitor.visitPolyline(this); }
+}
+
+/** Polyline köşe noktası (VERTEX) */
+export class CadVertex extends CadObject {
+  constructor(
+    id: CadObjectId,
+    public readonly x: number,
+    public readonly y: number,
+    layer: string,
+    colorIndex: number = 256,
+    linetype: string = 'BYLAYER',
+    ownerId: CadObjectId | null = null,
+  ) {
+    super(id, layer, colorIndex, linetype, ownerId);
+  }
+  accept(visitor: CadObjectVisitor): void { visitor.visitVertex(this); }
+}
+
+/** XDATA genişletilmiş veri */
+export class CadXData extends CadObject {
+  constructor(
+    id: CadObjectId,
+    public readonly appName: string,
+    public readonly codes: Map<number, string | number>,
+    layer: string,
+    colorIndex: number = 256,
+    linetype: string = 'BYLAYER',
+    ownerId: CadObjectId | null = null,
+  ) {
+    super(id, layer, colorIndex, linetype, ownerId);
+  }
+  accept(visitor: CadObjectVisitor): void { visitor.visitXData(this); }
+}
+
+/** ACAD_REACTORS reaktör verisi */
+export class CadAcDbReactors extends CadObject {
+  constructor(
+    id: CadObjectId,
+    public readonly ownerHandle: string,
+    public readonly reactorHandles: string[],
+    layer: string,
+    colorIndex: number = 256,
+    linetype: string = 'BYLAYER',
+    ownerId: CadObjectId | null = null,
+  ) {
+    super(id, layer, colorIndex, linetype, ownerId);
+  }
+  accept(visitor: CadObjectVisitor): void { visitor.visitAcDbReactors(this); }
+}
+
+/** DICTIONARY sözlük verisi */
+export class CadAcDbDictionary extends CadObject {
+  constructor(
+    id: CadObjectId,
+    public readonly name: string,
+    public readonly entries: Map<string, CadObject>,
+    layer: string,
+    colorIndex: number = 256,
+    linetype: string = 'BYLAYER',
+    ownerId: CadObjectId | null = null,
+  ) {
+    super(id, layer, colorIndex, linetype, ownerId);
+  }
+  accept(visitor: CadObjectVisitor): void { visitor.visitAcDbDictionary(this); }
+}
+
 export interface CadObjectVisitor {
   visitLayer(layer: CadLayerTableRecord): void;
   visitBlock(block: CadBlockTableRecord): void;
@@ -152,6 +264,13 @@ export interface CadObjectVisitor {
   visitText(text: CadText): void;
   visitMText(mtext: CadMText): void;
   visitLwPolyline(poly: CadLwPolyline): void;
+  visitPoint(point: CadPoint): void;
+  visitInsert(insert: CadInsert): void;
+  visitPolyline(polyline: CadPolyline): void;
+  visitVertex(vertex: CadVertex): void;
+  visitXData(xdata: CadXData): void;
+  visitAcDbReactors(reactors: CadAcDbReactors): void;
+  visitAcDbDictionary(dictionary: CadAcDbDictionary): void;
 }
 
 export class CadDatabase {
