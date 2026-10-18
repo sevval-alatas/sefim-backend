@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -15,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import ezdxf
-from ezdxf import bbox
+from ezdxf import bbox, path as ezdxf_path
 
 DWG_SIGNATURES = {f"AC{version}".encode("ascii") for version in range(1012, 1033)}
 SUPPORTED_DXF_VERSIONS = (
@@ -30,7 +31,31 @@ SUPPORTED_DXF_VERSIONS = (
 )
 DIAGNOSTIC_LIMIT = 3000
 SCENE_SCHEMA = "sefim-cad-scene/1"
-MAX_SCENE_ENTITIES = 300_000
+MAX_SCENE_ENTITIES = 1_000_000
+MAX_INSERT_DEPTH = 8
+IGNORED_ENTITY_TYPES = {
+    "ATTDEF",
+    "SEQEND",
+    "VIEWPORT",
+    "WIPEOUT",
+    "IMAGE",
+    "OLE2FRAME",
+    "PDFUNDERLAY",
+    "RAY",
+    "REGION",
+    "XLINE",
+}
+_SURROGATE_RE = re.compile(r"[\udc80-\udcff]+")
+_CP1252_TO_TR = str.maketrans(
+    {
+        "\u00d0": "Ğ",
+        "\u00dd": "İ",
+        "\u00de": "Ş",
+        "\u00f0": "ğ",
+        "\u00fd": "ı",
+        "\u00fe": "ş",
+    }
+)
 
 
 class ConversionError(Exception):
@@ -42,9 +67,24 @@ def _short(value: str, limit: int = DIAGNOSTIC_LIMIT) -> str:
     return value if len(value) <= limit else value[-limit:]
 
 
+def _clean_str(value: str) -> str:
+    if _SURROGATE_RE.search(value):
+        def _replace(match: re.Match[str]) -> str:
+            raw = bytes(ord(ch) - 0xDC00 for ch in match.group(0))
+            for encoding in ("utf-8", "cp1254", "latin1"):
+                try:
+                    return raw.decode(encoding)
+                except UnicodeDecodeError:
+                    continue
+            return raw.decode("utf-8", errors="replace")
+
+        value = _SURROGATE_RE.sub(_replace, value)
+    return value.translate(_CP1252_TO_TR)
+
+
 def _json_safe(value: Any) -> Any:
     if isinstance(value, str):
-        return value.encode("utf-8", errors="replace").decode("utf-8")
+        return _clean_str(value).encode("utf-8", errors="replace").decode("utf-8")
     if isinstance(value, dict):
         return {_json_safe(key): _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
@@ -54,200 +94,577 @@ def _json_safe(value: Any) -> Any:
 
 def _point(values: Any) -> list[float] | None:
     try:
-        point = [float(value) for value in tuple(values)[:3]]
+        coords = tuple(values)
+        x = float(coords[0])
+        y = float(coords[1])
     except (TypeError, ValueError, IndexError):
         return None
-    while len(point) < 3:
-        point.append(0.0)
-    return point if all(map(math.isfinite, point)) else None
+    if not (math.isfinite(x) and math.isfinite(y)):
+        return None
+    return [round(x, 3), round(y, 3), 0.0]
 
 
-def _entity_feature(entity: Any) -> dict[str, Any] | None:
-    kind = entity.dxftype()
-    data = entity.dxf
-    layer = data.get("layer", "0")
+def _wcs_point(entity: Any, value: Any) -> list[float] | None:
+    try:
+        wcs = entity.ocs().to_wcs(value)
+    except Exception:
+        wcs = value
+    return _point(wcs)
+
+
+def _is_mirrored_ocs(entity: Any) -> bool:
+    try:
+        return float(entity.dxf.extrusion.z) < 0.0
+    except Exception:
+        return False
+
+
+def _make_base_feature(
+    handle: str,
+    kind: str,
+    layer: str,
+    color: int | None,
+    true_color: int | None,
+    lineweight: int | None,
+    geometry: dict[str, Any],
+) -> dict[str, Any]:
     feature: dict[str, Any] = {
-        "id": data.get("handle"),
+        "id": handle,
         "type": kind,
         "layer": layer,
     }
-    if data.hasattr("color"):
-        feature["color"] = data.get("color")
-    if data.hasattr("true_color"):
-        feature["trueColor"] = data.get("true_color")
-    if data.hasattr("lineweight"):
-        feature["lineweight"] = data.get("lineweight")
-
-    geometry: dict[str, Any]
-    if kind == "LINE":
-        geometry = {"start": _point(data.start), "end": _point(data.end)}
-    elif kind == "LWPOLYLINE":
-        geometry = {
-            "vertices": [
-                {"point": _point((x, y)), "bulge": float(bulge)}
-                for x, y, bulge in entity.get_points("xyb")
-            ],
-            "closed": entity.closed,
-            "elevation": float(data.get("elevation", 0.0)),
-        }
-    elif kind == "POLYLINE":
-        geometry = {
-            "vertices": [
-                {
-                    "point": _point(vertex.dxf.location),
-                    "bulge": float(vertex.dxf.get("bulge", 0.0)),
-                }
-                for vertex in entity.vertices
-            ],
-            "closed": entity.is_closed,
-            "mode": "3d" if entity.is_3d_polyline else "2d",
-        }
-    elif kind == "CIRCLE":
-        geometry = {"center": _point(data.center), "radius": float(data.radius)}
-    elif kind == "ARC":
-        geometry = {
-            "center": _point(data.center),
-            "radius": float(data.radius),
-            "startAngle": float(data.start_angle),
-            "endAngle": float(data.end_angle),
-        }
-    elif kind == "ELLIPSE":
-        geometry = {
-            "center": _point(data.center),
-            "majorAxis": _point(data.major_axis),
-            "ratio": float(data.ratio),
-            "startParameter": float(data.start_param),
-            "endParameter": float(data.end_param),
-        }
-    elif kind == "POINT":
-        geometry = {"point": _point(data.location)}
-    elif kind == "TEXT":
-        geometry = {
-            "text": str(data.get("text", "")),
-            "insert": _point(data.insert),
-            "height": float(data.get("height", 0.0)),
-            "rotation": float(data.get("rotation", 0.0)),
-            "widthFactor": float(data.get("width", 1.0)),
-            "oblique": float(data.get("oblique", 0.0)),
-            "style": str(data.get("style", "Standard")),
-        }
-    elif kind == "MTEXT":
-        geometry = {
-            "text": entity.text,
-            "insert": _point(data.insert),
-            "charHeight": float(data.get("char_height", 0.0)),
-            "width": float(data.get("width", 0.0)),
-            "rotation": float(data.get("rotation", 0.0)),
-            "attachment": int(data.get("attachment_point", 1)),
-            "style": str(data.get("style", "Standard")),
-        }
-    elif kind == "SPLINE":
-        geometry = {
-            "degree": int(data.get("degree", 3)),
-            "closed": entity.closed,
-            "controlPoints": [_point(point) for point in entity.control_points],
-            "fitPoints": [_point(point) for point in entity.fit_points],
-            "knots": [float(value) for value in entity.knots],
-            "weights": [float(value) for value in entity.weights],
-        }
-    elif kind in {"SOLID", "TRACE", "3DFACE"}:
-        geometry = {
-            "vertices": [
-                _point(data.get(f"vtx{index}"))
-                for index in range(4)
-                if data.hasattr(f"vtx{index}")
-            ]
-        }
-    elif kind == "INSERT":
-        geometry = {
-            "block": str(data.get("name", "")),
-            "insert": _point(data.insert),
-            "scale": [
-                float(data.get("xscale", 1.0)),
-                float(data.get("yscale", 1.0)),
-                float(data.get("zscale", 1.0)),
-            ],
-            "rotation": float(data.get("rotation", 0.0)),
-            "columnCount": int(data.get("column_count", 1)),
-            "rowCount": int(data.get("row_count", 1)),
-            "columnSpacing": float(data.get("column_spacing", 0.0)),
-            "rowSpacing": float(data.get("row_spacing", 0.0)),
-        }
-    elif kind == "DIMENSION":
-        geometry = {
-            "block": str(data.get("geometry", "")),
-            "text": str(data.get("text", "")),
-            "measurement": float(data.get("actual_measurement", 0.0)),
-            "dimensionType": int(data.get("dimtype", 0)),
-        }
-    else:
-        return None
-
+    if color is not None:
+        feature["color"] = color
+    if true_color is not None:
+        feature["trueColor"] = true_color
+    if lineweight is not None:
+        feature["lineweight"] = lineweight
     feature["geometry"] = geometry
     return feature
 
 
+def _resolve_style(
+    entity: Any,
+    parent_layer: str | None,
+    parent_color: int | None,
+    parent_true_color: int | None,
+    layer_colors: dict[str, int],
+    layer_true_colors: dict[str, int],
+) -> tuple[str, int | None, int | None, int | None]:
+    data = entity.dxf
+    raw_layer = _clean_str(str(data.get("layer", "0") or "0"))
+    layer = parent_layer if (raw_layer == "0" and parent_layer) else raw_layer
+
+    color = data.get("color", 256) if data.hasattr("color") else 256
+    true_color = data.get("true_color") if data.hasattr("true_color") else None
+
+    if color == 0:
+        color = (
+            parent_color
+            if parent_color is not None
+            else layer_colors.get(layer, 7)
+        )
+        if true_color is None:
+            true_color = parent_true_color
+    elif color == 256 or color is None:
+        color = layer_colors.get(layer, 7)
+        if true_color is None:
+            true_color = layer_true_colors.get(layer)
+
+    lineweight = data.get("lineweight") if data.hasattr("lineweight") else None
+    return layer, color, true_color, lineweight
+
+
+def _expand_entity_features(
+    entity: Any,
+    layer_colors: dict[str, int],
+    layer_true_colors: dict[str, int],
+    unsupported: dict[str, int],
+    id_counter: list[int],
+    parent_layer: str | None = None,
+    parent_color: int | None = None,
+    parent_true_color: int | None = None,
+    depth: int = 0,
+) -> list[dict[str, Any]]:
+    kind = entity.dxftype()
+    if kind in IGNORED_ENTITY_TYPES:
+        return []
+
+    data = entity.dxf
+    layer, color, true_color, lineweight = _resolve_style(
+        entity,
+        parent_layer,
+        parent_color,
+        parent_true_color,
+        layer_colors,
+        layer_true_colors,
+    )
+
+    def _next_id() -> str:
+        raw_handle = data.get("handle")
+        if raw_handle and depth == 0:
+            return str(raw_handle)
+        id_counter[0] += 1
+        return f"{raw_handle or 'V'}_{id_counter[0]}"
+
+    if kind == "INSERT":
+        results: list[dict[str, Any]] = []
+        try:
+            attribs = list(getattr(entity, "attribs", ()))
+        except Exception:
+            attribs = []
+        for attrib in attribs:
+            results.extend(
+                _expand_entity_features(
+                    attrib,
+                    layer_colors,
+                    layer_true_colors,
+                    unsupported,
+                    id_counter,
+                    parent_layer=layer,
+                    parent_color=color,
+                    parent_true_color=true_color,
+                    depth=depth + 1,
+                )
+            )
+        if depth >= MAX_INSERT_DEPTH:
+            return results
+        try:
+            virtual_items = list(entity.virtual_entities())
+        except Exception:
+            return results
+        for child in virtual_items:
+            results.extend(
+                _expand_entity_features(
+                    child,
+                    layer_colors,
+                    layer_true_colors,
+                    unsupported,
+                    id_counter,
+                    parent_layer=layer,
+                    parent_color=color,
+                    parent_true_color=true_color,
+                    depth=depth + 1,
+                )
+            )
+        return results
+
+    if kind in {
+        "LWPOLYLINE",
+        "POLYLINE",
+        "DIMENSION",
+        "ARC_DIMENSION",
+        "LARGE_RADIAL_DIMENSION",
+        "LEADER",
+        "MULTILEADER",
+        "MLEADER",
+        "MLINE",
+    }:
+        if depth >= MAX_INSERT_DEPTH + 4:
+            return []
+        try:
+            virtual_items = list(entity.virtual_entities())
+        except Exception:
+            unsupported[kind] = unsupported.get(kind, 0) + 1
+            return []
+        results = []
+        for child in virtual_items:
+            results.extend(
+                _expand_entity_features(
+                    child,
+                    layer_colors,
+                    layer_true_colors,
+                    unsupported,
+                    id_counter,
+                    parent_layer=layer,
+                    parent_color=color,
+                    parent_true_color=true_color,
+                    depth=depth + 1,
+                )
+            )
+        return results
+
+    if kind == "HATCH":
+        results = []
+        try:
+            paths = list(ezdxf_path.from_hatch(entity))
+        except Exception:
+            paths = []
+        for hatch_path in paths:
+            try:
+                pts = [_point(pt) for pt in hatch_path.flattening(distance=2.0)]
+            except Exception:
+                continue
+            valid_pts = [pt for pt in pts if pt is not None]
+            for idx in range(len(valid_pts) - 1):
+                p1, p2 = valid_pts[idx], valid_pts[idx + 1]
+                if p1 != p2:
+                    id_counter[0] += 1
+                    results.append(
+                        _make_base_feature(
+                            f"{data.get('handle') or 'H'}_{id_counter[0]}",
+                            "LINE",
+                            layer,
+                            color,
+                            true_color,
+                            lineweight,
+                            {"start": p1, "end": p2},
+                        )
+                    )
+        return results
+
+    if kind in {"SOLID", "TRACE", "3DFACE"}:
+        order = (0, 1, 3, 2) if kind in {"SOLID", "TRACE"} else (0, 1, 2, 3)
+        pts: list[list[float]] = []
+        for idx in order:
+            attr_name = f"vtx{idx}"
+            if data.hasattr(attr_name):
+                raw_pt = data.get(attr_name)
+                pt = (
+                    _wcs_point(entity, raw_pt)
+                    if kind in {"SOLID", "TRACE"}
+                    else _point(raw_pt)
+                )
+                if pt is not None and (not pts or pts[-1] != pt):
+                    pts.append(pt)
+        if len(pts) < 2:
+            return []
+        results = []
+        count = len(pts)
+        for idx in range(count):
+            p1 = pts[idx]
+            p2 = pts[(idx + 1) % count]
+            if p1 != p2:
+                id_counter[0] += 1
+                results.append(
+                    _make_base_feature(
+                        f"{data.get('handle') or 'S'}_{id_counter[0]}",
+                        "LINE",
+                        layer,
+                        color,
+                        true_color,
+                        lineweight,
+                        {"start": p1, "end": p2},
+                    )
+                )
+        return results
+
+    if kind == "MTEXT":
+        insert = _point(data.insert)
+        if insert is None:
+            return []
+        try:
+            raw_lines = entity.plain_text(split=True)
+        except Exception:
+            raw_lines = [str(getattr(entity, "text", ""))]
+        lines = [
+            _clean_str(line).strip()
+            for line in raw_lines
+            if _clean_str(line).strip()
+        ]
+        if not lines:
+            return []
+        height = round(float(data.get("char_height", 2.5) or 2.5), 3)
+        try:
+            rotation = round(float(entity.get_rotation()), 3)
+        except Exception:
+            rotation = round(float(data.get("rotation", 0.0)), 3)
+        rad = math.radians(rotation)
+        line_step = height * 1.35
+        dx = math.sin(rad) * line_step
+        dy = -math.cos(rad) * line_step
+        style = _clean_str(str(data.get("style", "Standard")))
+        results = []
+        for idx, text_line in enumerate(lines):
+            line_insert = [
+                round(insert[0] + idx * dx, 3),
+                round(insert[1] + idx * dy, 3),
+                0.0,
+            ]
+            id_counter[0] += 1
+            results.append(
+                _make_base_feature(
+                    f"{data.get('handle') or 'MT'}_{id_counter[0]}",
+                    "TEXT",
+                    layer,
+                    color,
+                    true_color,
+                    lineweight,
+                    {
+                        "text": text_line,
+                        "insert": line_insert,
+                        "height": height,
+                        "rotation": rotation,
+                        "widthFactor": 1.0,
+                        "oblique": 0.0,
+                        "style": style,
+                    },
+                )
+            )
+        return results
+
+    if kind in {"TEXT", "ATTRIB"}:
+        text_val = _clean_str(str(data.get("text", ""))).strip()
+        if not text_val:
+            return []
+        insert = _wcs_point(entity, data.insert)
+        if insert is None:
+            return []
+        rotation = float(data.get("rotation", 0.0))
+        if _is_mirrored_ocs(entity):
+            rotation = (180.0 - rotation) % 360.0
+        geometry = {
+            "text": text_val,
+            "insert": insert,
+            "height": round(float(data.get("height", 2.5) or 2.5), 3),
+            "rotation": round(rotation, 3),
+            "widthFactor": round(float(data.get("width", 1.0) or 1.0), 3),
+            "oblique": round(float(data.get("oblique", 0.0) or 0.0), 3),
+            "style": _clean_str(str(data.get("style", "Standard"))),
+        }
+        return [
+            _make_base_feature(
+                _next_id(),
+                "TEXT",
+                layer,
+                color,
+                true_color,
+                lineweight,
+                geometry,
+            )
+        ]
+
+    if kind == "LINE":
+        start = _point(data.start)
+        end = _point(data.end)
+        if start is None or end is None or start == end:
+            return []
+        return [
+            _make_base_feature(
+                _next_id(),
+                "LINE",
+                layer,
+                color,
+                true_color,
+                lineweight,
+                {"start": start, "end": end},
+            )
+        ]
+
+    if kind == "CIRCLE":
+        center = _wcs_point(entity, data.center)
+        radius = round(float(data.radius), 3)
+        if center is None or radius <= 0 or not math.isfinite(radius):
+            return []
+        return [
+            _make_base_feature(
+                _next_id(),
+                "CIRCLE",
+                layer,
+                color,
+                true_color,
+                lineweight,
+                {"center": center, "radius": radius},
+            )
+        ]
+
+    if kind == "ARC":
+        center = _wcs_point(entity, data.center)
+        radius = round(float(data.radius), 3)
+        if center is None or radius <= 0 or not math.isfinite(radius):
+            return []
+        start_angle = float(data.start_angle)
+        end_angle = float(data.end_angle)
+        if _is_mirrored_ocs(entity):
+            start_angle, end_angle = (
+                (180.0 - end_angle) % 360.0,
+                (180.0 - start_angle) % 360.0,
+            )
+        return [
+            _make_base_feature(
+                _next_id(),
+                "ARC",
+                layer,
+                color,
+                true_color,
+                lineweight,
+                {
+                    "center": center,
+                    "radius": radius,
+                    "startAngle": round(start_angle, 3),
+                    "endAngle": round(end_angle, 3),
+                },
+            )
+        ]
+
+    if kind == "ELLIPSE":
+        center = _point(data.center)
+        major_axis = _point(data.major_axis)
+        ratio = round(float(data.ratio), 6)
+        if center is None or major_axis is None or not math.isfinite(ratio):
+            return []
+        return [
+            _make_base_feature(
+                _next_id(),
+                "ELLIPSE",
+                layer,
+                color,
+                true_color,
+                lineweight,
+                {
+                    "center": center,
+                    "majorAxis": major_axis,
+                    "ratio": ratio,
+                    "startParameter": round(float(data.start_param), 4),
+                    "endParameter": round(float(data.end_param), 4),
+                },
+            )
+        ]
+
+    if kind == "POINT":
+        pt = _point(data.location)
+        if pt is None:
+            return []
+        return [
+            _make_base_feature(
+                _next_id(),
+                "POINT",
+                layer,
+                color,
+                true_color,
+                lineweight,
+                {"point": pt},
+            )
+        ]
+
+    if kind == "SPLINE":
+        control_points = [
+            pt for pt in (_point(point) for point in entity.control_points) if pt is not None
+        ]
+        fit_points = [
+            pt for pt in (_point(point) for point in entity.fit_points) if pt is not None
+        ]
+        if not control_points and not fit_points:
+            return []
+        return [
+            _make_base_feature(
+                _next_id(),
+                "SPLINE",
+                layer,
+                color,
+                true_color,
+                lineweight,
+                {
+                    "degree": int(data.get("degree", 3)),
+                    "closed": bool(entity.closed),
+                    "controlPoints": control_points,
+                    "fitPoints": fit_points,
+                    "knots": [round(float(value), 4) for value in entity.knots],
+                    "weights": [round(float(value), 4) for value in entity.weights],
+                },
+            )
+        ]
+
+    unsupported[kind] = unsupported.get(kind, 0) + 1
+    return []
+
+
+def _compute_scene_extents(
+    features: list[dict[str, Any]], fallback_extents: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    xs: list[float] = []
+    ys: list[float] = []
+    for feature in features:
+        ftype = feature["type"]
+        geom = feature["geometry"]
+        if ftype == "LINE":
+            xs.extend((geom["start"][0], geom["end"][0]))
+            ys.extend((geom["start"][1], geom["end"][1]))
+        elif ftype in {"CIRCLE", "ARC"}:
+            cx, cy = geom["center"][0], geom["center"][1]
+            r = geom["radius"]
+            xs.extend((cx - r, cx + r))
+            ys.extend((cy - r, cy + r))
+        elif ftype == "TEXT":
+            xs.append(geom["insert"][0])
+            ys.append(geom["insert"][1])
+        elif ftype == "POINT":
+            xs.append(geom["point"][0])
+            ys.append(geom["point"][1])
+    if not xs or not ys:
+        return fallback_extents
+    return {
+        "min": [round(min(xs), 3), round(min(ys), 3), 0.0],
+        "max": [round(max(xs), 3), round(max(ys), 3), 0.0],
+    }
+
+
 def _scene_model(document: Any) -> tuple[dict[str, Any], list[str]]:
     modelspace = document.modelspace()
-    bounds = bbox.extents(modelspace, fast=True)
-    extents = None
-    if bounds.has_data:
-        minimum = _point(bounds.extmin)
-        maximum = _point(bounds.extmax)
-        if minimum and maximum:
-            extents = {"min": minimum, "max": maximum}
-
-    features: list[dict[str, Any]] = []
-    unsupported: dict[str, int] = {}
-    truncated = False
-
-    def collect(entities: Any) -> list[dict[str, Any]]:
-        nonlocal truncated
-        output = []
-        for entity in entities:
-            if len(features) >= MAX_SCENE_ENTITIES:
-                truncated = True
-                break
-            try:
-                feature = _entity_feature(entity)
-                if feature is not None:
-                    json.dumps(feature, allow_nan=False)
-            except (AttributeError, TypeError, ValueError, IndexError):
-                feature = None
-            if feature is None:
-                kind = entity.dxftype()
-                unsupported[kind] = unsupported.get(kind, 0) + 1
-                continue
-            features.append(feature)
-            output.append(feature)
-        return output
-
-    modelspace_features = collect(modelspace)
-    blocks: dict[str, Any] = {}
-    for block in document.blocks:
-        name = block.name
-        if name.startswith("*Model_Space") or name.startswith("*Paper_Space"):
-            continue
-        blocks[name] = {
-            "basePoint": _point(block.block.dxf.base_point),
-            "entities": collect(block),
-        }
-        if truncated:
-            break
+    fallback_extents = None
+    try:
+        bounds = bbox.extents(modelspace, fast=True)
+        if bounds.has_data:
+            minimum = _point(bounds.extmin)
+            maximum = _point(bounds.extmax)
+            if minimum and maximum:
+                fallback_extents = {"min": minimum, "max": maximum}
+    except Exception:
+        fallback_extents = None
 
     layers = []
+    layer_colors: dict[str, int] = {}
+    layer_true_colors: dict[str, int] = {}
     for layer in document.layers:
+        name = _clean_str(str(layer.dxf.name))
+        raw_color = int(layer.dxf.get("color", 7) or 7)
+        clean_color = abs(raw_color) if raw_color != 0 else 7
+        true_color = layer.dxf.get("true_color") if layer.dxf.hasattr("true_color") else None
+        layer_colors[name] = clean_color
+        if true_color is not None:
+            layer_true_colors[name] = int(true_color)
         layers.append(
             {
-                "name": layer.dxf.name,
-                "color": layer.dxf.get("color", 7),
-                "trueColor": layer.dxf.get("true_color"),
+                "name": name,
+                "color": clean_color,
+                "trueColor": true_color,
                 "lineweight": layer.dxf.get("lineweight", -1),
-                "linetype": layer.dxf.get("linetype", "CONTINUOUS"),
+                "linetype": _clean_str(str(layer.dxf.get("linetype", "CONTINUOUS"))),
                 "visible": not layer.is_off() and not layer.is_frozen(),
                 "frozen": layer.is_frozen(),
             }
         )
+
+    features: list[dict[str, Any]] = []
+    unsupported: dict[str, int] = {}
+    truncated = False
+    id_counter = [0]
+
+    for entity in modelspace:
+        if len(features) >= MAX_SCENE_ENTITIES:
+            truncated = True
+            break
+        try:
+            expanded = _expand_entity_features(
+                entity,
+                layer_colors,
+                layer_true_colors,
+                unsupported,
+                id_counter,
+            )
+        except Exception:
+            kind = entity.dxftype()
+            if kind not in IGNORED_ENTITY_TYPES:
+                unsupported[kind] = unsupported.get(kind, 0) + 1
+            continue
+
+        for feature in expanded:
+            if len(features) >= MAX_SCENE_ENTITIES:
+                truncated = True
+                break
+            features.append(feature)
+
+    extents = _compute_scene_extents(features, fallback_extents)
 
     warnings = []
     if unsupported:
@@ -265,8 +682,8 @@ def _scene_model(document: Any) -> tuple[dict[str, Any], list[str]]:
         "units": units,
         "extents": extents,
         "layers": layers,
-        "blocks": blocks,
-        "entities": modelspace_features,
+        "blocks": {},
+        "entities": features,
         "entityCount": len(features),
         "unsupportedEntities": dict(sorted(unsupported.items())),
         "truncated": truncated,

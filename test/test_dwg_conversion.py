@@ -104,8 +104,9 @@ document.saveas(output)
             self.assertLess(scene["extents"]["min"][0], scene["extents"]["max"][0])
             self.assertIn("Walls", [layer["name"] for layer in scene["layers"]])
             self.assertEqual(scene["entities"][0]["type"], "LINE")
-            polyline = next(entity for entity in scene["entities"] if entity["type"] == "LWPOLYLINE")
-            self.assertEqual(polyline["geometry"]["vertices"][0]["bulge"], 0.5)
+            arc = next(entity for entity in scene["entities"] if entity["type"] == "ARC")
+            self.assertEqual(arc["layer"], "Walls")
+            self.assertGreater(arc["geometry"]["radius"], 0)
 
     def test_refuses_to_overwrite_existing_output_without_flag(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -151,10 +152,21 @@ document.saveas(output)
             dxf_path = root / "plan.dxf"
             scene_path = root / "scene.json"
             document = ezdxf.new("R2000")
+            document.layers.new("FurnitureLayer", dxfattribs={"color": 3})
             document.modelspace().add_circle((2, 3), 4)
             block = document.blocks.new("Furniture")
-            block.add_line((0, 0), (1, 1))
-            document.modelspace().add_blockref("Furniture", (10, 10))
+            block.add_line((0, 0), (1, 1), dxfattribs={"layer": "0", "color": 0})
+            block.add_circle((5, 0), 2, dxfattribs={"layer": "0"})
+            insert = document.modelspace().add_blockref(
+                "Furniture",
+                (10, 10),
+                dxfattribs={"layer": "FurnitureLayer", "xscale": -1.0, "yscale": 1.0},
+            )
+            insert.add_attrib("ROOM", "SALON", (12, 14), dxfattribs={"height": 2.5})
+            document.modelspace().add_mtext(
+                "{\\fArial;ZEM\udcddN KAT\\P2. SATIR}",
+                dxfattribs={"insert": (20, 30), "char_height": 3.0},
+            )
             document.saveas(dxf_path)
 
             result = self.run_cli(
@@ -168,9 +180,19 @@ document.saveas(output)
             scene = json.loads(scene_path.read_text())
             self.assertEqual(scene["entities"][0]["type"], "CIRCLE")
             self.assertEqual(scene["entities"][0]["geometry"]["radius"], 4)
-            self.assertEqual(scene["entities"][1]["type"], "INSERT")
-            self.assertIsNotNone(scene["entities"][1]["geometry"]["insert"])
-            self.assertEqual(scene["blocks"]["Furniture"]["entities"][0]["type"], "LINE")
+            texts = [e for e in scene["entities"] if e["type"] == "TEXT"]
+            self.assertEqual(
+                [t["geometry"]["text"] for t in texts],
+                ["SALON", "ZEMİN KAT", "2. SATIR"],
+            )
+            expanded_line = next(e for e in scene["entities"] if e["type"] == "LINE")
+            self.assertEqual(expanded_line["layer"], "FurnitureLayer")
+            self.assertEqual(expanded_line["color"], 3)
+            self.assertEqual(expanded_line["geometry"]["start"], [10.0, 10.0, 0.0])
+            self.assertEqual(expanded_line["geometry"]["end"], [9.0, 11.0, 0.0])
+            mirrored_circle = scene["entities"][3]
+            self.assertEqual(mirrored_circle["type"], "CIRCLE")
+            self.assertEqual(mirrored_circle["geometry"]["center"], [5.0, 10.0, 0.0])
 
 
 if __name__ == "__main__":
