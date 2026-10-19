@@ -70,13 +70,24 @@ export class DwgAndroidBridgeService {
 
   private async readViaHttp(buffer: Buffer, originalName: string): Promise<AndroidDwgReaderResult> {
     try {
-      const formData = new FormData();
-      const blob = new Blob([buffer], { type: 'application/octet-stream' });
-      formData.append('file', blob, originalName);
+      const boundary = `----WebKitFormBoundary${randomUUID()}`;
+      const fields: Buffer[] = [];
+
+      const fileHeader = Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${originalName}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+        'utf8',
+      );
+      const fileFooter = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+
+      const body = Buffer.concat([...fields, fileHeader, buffer, fileFooter]);
 
       const response = await fetch(`${this.bridgeUrl}/ocr`, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'content-type': `multipart/form-data; boundary=${boundary}`,
+          'content-length': String(body.length),
+        },
+        body,
         signal: AbortSignal.timeout(180_000),
       });
 
@@ -95,7 +106,7 @@ export class DwgAndroidBridgeService {
     }
   }
 
-  private spawnBridge(inputPath: string, originalName: string): Promise<AndroidDwgReaderResult> {
+  private spawnBridge(inputPath: string): Promise<AndroidDwgReaderResult> {
     return new Promise((resolve, reject) => {
       let stdoutAcc = '';
       let stderrAcc = '';
