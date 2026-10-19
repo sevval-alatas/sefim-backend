@@ -99,7 +99,8 @@ export class DwgReaderService {
           this.logger.log(`DWG okuma tamamlandı: ${result.total_entities} nesne, ${result.layers_found.length} katman`);
           resolve(result);
         } catch (parseErr) {
-          this.logger.error(`JSON parse hatası: ${parseErr.message}, stdout: ${stdoutAcc.slice(0, 500)}`);
+          const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+          this.logger.error(`JSON parse hatası: ${msg}, stdout: ${stdoutAcc.slice(0, 500)}`);
           reject(new InternalServerErrorException('DWG çıkışı çözümlenemedi.'));
         }
       });

@@ -8,13 +8,16 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  Query,
+} from '@nestjs/common';
+import {
   ApiTags,
   ApiConsumes,
   ApiOperation,
   ApiResponse,
   ApiBody,
   ApiQuery,
-} from '@nestjs/common';
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { DwgSvgService } from './dwg-svg.service.js';
@@ -88,12 +91,18 @@ export class DwgSvgController {
       },
     }),
   )
+  @ApiOperation({ summary: 'DWG dosyasını SVG\'ye dönüştürür' })
+  @ApiResponse({ status: 200, description: 'SVG çıktısı döner.' })
+  @ApiQuery({ name: 'layers', required: false, type: String })
+  @ApiQuery({ name: 'monochrome', required: false, type: String })
+  @ApiQuery({ name: 'paperWidth', required: false, type: String })
+  @ApiQuery({ name: 'paperHeight', required: false, type: String })
   async convertToSvg(
     @UploadedFile() file: Express.Multer.File,
-    @ApiQuery() layers?: string,
-    @ApiQuery() monochrome?: string,
-    @ApiQuery() paperWidth?: string,
-    @ApiQuery() paperHeight?: string,
+    @Query('layers') layers?: string,
+    @Query('monochrome') monochrome?: string,
+    @Query('paperWidth') paperWidth?: string,
+    @Query('paperHeight') paperHeight?: string,
   ): Promise<SvgConversionResult> {
     if (!file) {
       throw new BadRequestException('"file" alanında geçerli bir DWG dosyası yüklenmelidir.');

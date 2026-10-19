@@ -62,7 +62,7 @@ export class DwgAndroidBridgeService {
     try {
       await mkdir(jobDirectory, { recursive: true });
       await writeFile(inputPath, buffer);
-      return await this.spawnBridge(inputPath, originalName);
+      return await this.spawnBridge(inputPath);
     } finally {
       await rm(jobDirectory, { recursive: true, force: true }).catch(() => {});
     }

@@ -9,18 +9,22 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+} from '@nestjs/common';
+import {
   ApiTags,
   ApiConsumes,
   ApiOperation,
   ApiResponse,
   ApiBody,
-} from '@nestjs/common';
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { DwgReaderService } from './dwg-reader.service.js';
-import { DwgNativeReaderService } from './dwg-native-reader.service.js';
 import { DwgReaderResult } from './dwg-reader.service.js';
+import { DwgNativeReaderService } from './dwg-native-reader.service.js';
 import { NativeReadResult } from './dwg-native-reader.service.js';
+import { DwgCParserReaderService } from './dwg-c-parser-reader.service.js';
+import { DwgCParserResult } from './dwg-c-parser-reader.service.js';
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 
@@ -30,6 +34,7 @@ export class DwgReaderController {
   constructor(
     private readonly dwgReaderService: DwgReaderService,
     private readonly dwgNativeReaderService: DwgNativeReaderService,
+    private readonly dwgCParserReaderService: DwgCParserReaderService,
   ) {}
 
   @Get('status')
@@ -121,5 +126,49 @@ export class DwgReaderController {
       throw new BadRequestException('"file" alanında geçerli bir DWG dosyası yüklenmelidir.');
     }
     return this.dwgNativeReaderService.readBuffer(file.buffer);
+  }
+
+  @Post('c-parser')
+  @ApiOperation({
+    summary: 'DWG dosyasını C parser ile okur (DXF ↔ DWG eşleştirme tabanlı)',
+    description: `Özgün Model native C parser'ı ile DWG ikili formatını okur.
+Little-endian double/string offset'leri DXF grub kodlarıyla eşlenir.
+Kaynak: Özgün Model/DWG_OKUYUCU_SPESIFIKASYON.md`,
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: '.dwg uzantılı CAD çizim dosyası (maks. 100 MB)',
+        },
+      },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'C parser DWG sonucu döner.' })
+  @ApiResponse({ status: 400, description: 'Geçersiz dosya veya DWG formatında değil.' })
+  @ApiResponse({ status: 500, description: 'Sunucu tarafı okuma hatası.' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
+      fileFilter: (_request, file, callback) => {
+        const hasValidExt = /\.(dwg)$/i.test(file.originalname);
+        if (!hasValidExt) {
+          return callback(new BadRequestException('Sadece .dwg uzantılı CAD dosyaları kabul edilir.'), false);
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  async readDwgCParser(@UploadedFile() file: Express.Multer.File): Promise<DwgCParserResult> {
+    if (!file) {
+      throw new BadRequestException('"file" alanında geçerli bir DWG dosyası yüklenmelidir.');
+    }
+    return this.dwgCParserReaderService.readBuffer(file.buffer, file.originalname);
   }
 }

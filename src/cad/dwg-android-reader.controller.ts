@@ -4,12 +4,14 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+} from '@nestjs/common';
+import {
   ApiTags,
   ApiConsumes,
   ApiOperation,
   ApiResponse,
   ApiBody,
-} from '@nestjs/common';
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { DwgAndroidBridgeService } from './dwg-android-bridge.service.js';

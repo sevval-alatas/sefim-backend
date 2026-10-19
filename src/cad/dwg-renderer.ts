@@ -7,7 +7,7 @@
  * yaygın kullanılan grup kodlarını kapsar.
  */
 
-import { CadDatabase, CadObjectVisitor } from './dwg-model.js';
+import { CadDatabase, CadObject, CadObjectVisitor } from './dwg-model.js';
 import {
   CadLayerTableRecord,
   CadBlockTableRecord,
@@ -17,6 +17,13 @@ import {
   CadText,
   CadMText,
   CadLwPolyline,
+  CadPoint,
+  CadInsert,
+  CadPolyline,
+  CadVertex,
+  CadXData,
+  CadAcDbReactors,
+  CadAcDbDictionary,
   CadObjectId,
 } from './dwg-model.js';
 
@@ -341,5 +348,48 @@ export class CadToDxfRenderer extends CadRenderer implements CadObjectVisitor {
       this.code(20, y);
     }
     this.code(210, 0.0); this.code(220, 0.0); this.code(230, 1.0); // Extrusion
+  }
+
+  visitPoint(point: CadPoint): void {
+    this.entityHeader(point, 'POINT');
+    this.code(10, point.x);
+    this.code(20, point.y);
+    this.code(30, 0.0);
+  }
+
+  visitInsert(insert: CadInsert): void {
+    this.entityHeader(insert, 'INSERT');
+    this.code(10, insert.insertX);
+    this.code(20, insert.insertY);
+    this.code(30, 0.0);
+    this.code(2, insert.blockName);
+  }
+
+  visitPolyline(polyline: CadPolyline): void {
+    this.entityHeader(polyline, 'POLYLINE');
+    this.code(10, 0.0);
+    this.code(20, 0.0);
+    this.code(30, 0.0);
+    this.code(70, 0);
+    this.code(210, 0.0); this.code(220, 0.0); this.code(230, 1.0);
+  }
+
+  visitVertex(vertex: CadVertex): void {
+    this.entityHeader(vertex, 'VERTEX');
+    this.code(10, vertex.x);
+    this.code(20, vertex.y);
+    this.code(30, 0.0);
+  }
+
+  visitXData(xdata: CadXData): void {
+    // XDATA emitted as APPID + group codes
+  }
+
+  visitAcDbReactors(reactors: CadAcDbReactors): void {
+    // Reactors not rendered in DXF output
+  }
+
+  visitAcDbDictionary(dictionary: CadAcDbDictionary): void {
+    // Dictionary not rendered in DXF output
   }
 }

@@ -5,6 +5,7 @@ import { DwgConverterService } from './dwg-converter.service.js';
 import { DwgReaderController } from './dwg-reader.controller.js';
 import { DwgReaderService } from './dwg-reader.service.js';
 import { DwgNativeReaderService } from './dwg-native-reader.service.js';
+import { DwgCParserReaderService } from './dwg-c-parser-reader.service.js';
 import { DwgSvgController } from './dwg-svg.controller.js';
 import { DwgSvgService } from './dwg-svg.service.js';
 import { DwgAndroidReaderController } from './dwg-android-reader.controller.js';
@@ -17,6 +18,7 @@ import { DwgAndroidBridgeService } from './dwg-android-bridge.service.js';
     CadDrawingService,
     DwgReaderService,
     DwgNativeReaderService,
+    DwgCParserReaderService,
     DwgSvgService,
     DwgAndroidBridgeService,
   ],
@@ -25,6 +27,7 @@ import { DwgAndroidBridgeService } from './dwg-android-bridge.service.js';
     CadDrawingService,
     DwgReaderService,
     DwgNativeReaderService,
+    DwgCParserReaderService,
     DwgSvgService,
     DwgAndroidBridgeService,
   ],
